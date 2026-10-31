@@ -4,7 +4,8 @@ name: Build MobileDoctorPro APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -12,6 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -37,6 +39,11 @@ jobs:
 
       - name: Extract Android project
         run: unzip -o MobileDoctorPro-Source-For-GitHub.zip -d source
+
+      - name: Verify project files
+        run: |
+          ls -la source
+          test -f source/app/build.gradle || test -f source/app/build.gradle.kts
 
       - name: Build APK
         working-directory: source
