@@ -1,4 +1,3 @@
-
 package com.mobiledoctorpro.app
 
 import android.Manifest
@@ -12,6 +11,7 @@ import android.hardware.SensorManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
+import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import android.os.BatteryManager
 import android.os.Build
@@ -57,6 +57,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private data class SimDetails(
+    val title: String,
+    val simState: String,
+    val operatorName: String,
+    val networkName: String,
+    val registration: String,
+    val networkType: String,
+    val roaming: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiagnosticHome() {
@@ -69,18 +79,14 @@ fun DiagnosticHome() {
     var screenTest by remember { mutableStateOf(false) }
     var screenColor by remember { mutableIntStateOf(0) }
 
-    val phonePermissionLauncher =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) {
-            refresh++
-        }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        refresh++
+    }
 
     LaunchedEffect(page) {
-        if (page == "battery" ||
-            page == "charger" ||
-            page == "network"
-        ) {
+        if (page == "battery" || page == "charger" || page == "network") {
             while (true) {
                 delay(2000)
                 refresh++
@@ -89,73 +95,42 @@ fun DiagnosticHome() {
     }
 
     LaunchedEffect(page) {
-        if (page == "network" &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-            context.checkSelfPermission(
-                Manifest.permission.READ_PHONE_STATE
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            phonePermissionLauncher.launch(
-                Manifest.permission.READ_PHONE_STATE
-            )
+        if (page == "network" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val needed = listOf(
+                Manifest.permission.READ_PHONE_STATE,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ).filter {
+                context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+            }
+            if (needed.isNotEmpty()) permissionLauncher.launch(needed.toTypedArray())
         }
     }
 
-    val data = remember(refresh) {
-        collectDiagnostics(context)
-    }
+    val data = remember(refresh) { collectDiagnostics(context) }
 
-    fun tr(en: String, te: String) =
-        if (telugu) te else en
+    fun tr(en: String, te: String) = if (telugu) te else en
 
-    val colors = listOf(
-        Color.White, Color.Black, Color.Red,
-        Color.Green, Color.Blue
-    )
-
+    val colors = listOf(Color.White, Color.Black, Color.Red, Color.Green, Color.Blue)
     val bg = if (dark) Navy else Color(0xFFF3F6FA)
     val fg = if (dark) Color.White else Color(0xFF172033)
     val panel = if (dark) Panel else Color.White
 
     if (screenTest) {
-        val textColor =
-            if (screenColor == 0 || screenColor == 3)
-                Color.Black else Color.White
-
+        val textColor = if (screenColor == 0 || screenColor == 3) Color.Black else Color.White
         Column(
-            Modifier.fillMaxSize()
-                .background(colors[screenColor])
-                .clickable {
-                    screenColor = (screenColor + 1) % colors.size
-                }
-                .padding(24.dp),
+            Modifier.fillMaxSize().background(colors[screenColor]).clickable {
+                screenColor = (screenColor + 1) % colors.size
+            }.padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                tr("Screen / Touch Test", "స్క్రీన్ / టచ్ పరీక్ష"),
-                color = textColor,
-                fontSize = 25.sp,
-                fontWeight = FontWeight.Bold
-            )
-
+            Text(tr("Screen / Touch Test", "స్క్రీన్ / టచ్ పరీక్ష"), color = textColor, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(24.dp))
-
-            Text(
-                tr("Tap screen to change colour", "రంగు మార్చడానికి స్క్రీన్ తాకండి"),
-                color = textColor
-            )
-
-            Button(onClick = {
-                screenColor = (screenColor + 1) % colors.size
-            }) {
+            Text(tr("Tap screen to change colour", "రంగు మార్చడానికి స్క్రీన్ తాకండి"), color = textColor)
+            Button(onClick = { screenColor = (screenColor + 1) % colors.size }) {
                 Text(tr("Next colour", "తదుపరి రంగు"))
             }
-
-            Button(onClick = {
-                screenTest = false
-                screenColor = 0
-            }) {
+            Button(onClick = { screenTest = false; screenColor = 0 }) {
                 Text(tr("Finish test", "పరీక్ష ముగించు"))
             }
         }
@@ -163,23 +138,14 @@ fun DiagnosticHome() {
     }
 
     MaterialTheme(
-        colorScheme = if (dark) {
-            darkColorScheme(
-                primary = Accent,
-                background = Navy,
-                surface = Panel,
-                onBackground = Color.White,
-                onSurface = Color.White
-            )
-        } else {
-            lightColorScheme(
-                primary = Color(0xFF1769AA),
-                background = Color(0xFFF3F6FA),
-                surface = Color.White,
-                onBackground = Color(0xFF172033),
-                onSurface = Color(0xFF172033)
-            )
-        }
+        colorScheme = if (dark) darkColorScheme(
+            primary = Accent, background = Navy, surface = Panel,
+            onBackground = Color.White, onSurface = Color.White
+        ) else lightColorScheme(
+            primary = Color(0xFF1769AA), background = Color(0xFFF3F6FA),
+            surface = Color.White, onBackground = Color(0xFF172033),
+            onSurface = Color(0xFF172033)
+        )
     ) {
         Scaffold(
             containerColor = bg,
@@ -187,137 +153,46 @@ fun DiagnosticHome() {
                 TopAppBar(
                     title = {
                         Column {
-                            Text(
-                                "Mobile Doctor Pro",
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "PROFESSIONAL DIAGNOSTICS",
-                                fontSize = 10.sp,
-                                color = Color.Gray
-                            )
+                            Text("Mobile Doctor Pro", fontWeight = FontWeight.Bold)
+                            Text("PROFESSIONAL DIAGNOSTICS", fontSize = 10.sp, color = Color.Gray)
                         }
                     },
                     actions = {
-                        TextButton(onClick = { telugu = !telugu }) {
-                            Text(if (telugu) "EN" else "తెలుగు")
-                        }
-
-                        TextButton(onClick = { dark = !dark }) {
-                            Text(if (dark) "☀" else "☾")
-                        }
-
-                        TextButton(onClick = { refresh++ }) {
-                            Text("↻")
-                        }
+                        TextButton(onClick = { telugu = !telugu }) { Text(if (telugu) "EN" else "తెలుగు") }
+                        TextButton(onClick = { dark = !dark }) { Text(if (dark) "☀" else "☾") }
+                        TextButton(onClick = { refresh++ }) { Text("↻") }
                     }
                 )
             },
             bottomBar = {
                 NavigationBar(containerColor = panel) {
-                    NavigationBarItem(
-                        selected = page == "home",
-                        onClick = { page = "home" },
-                        icon = { Text("⌂") },
-                        label = { Text(tr("Home", "హోమ్")) }
-                    )
-
-                    NavigationBarItem(
-                        selected = page == "tests",
-                        onClick = { page = "tests" },
-                        icon = { Text("✓") },
-                        label = { Text(tr("Tests", "పరీక్షలు")) }
-                    )
-
-                    NavigationBarItem(
-                        selected = page == "report",
-                        onClick = { page = "report" },
-                        icon = { Text("▤") },
-                        label = { Text(tr("Report", "రిపోర్ట్")) }
-                    )
+                    NavigationBarItem(selected = page == "home", onClick = { page = "home" }, icon = { Text("⌂") }, label = { Text(tr("Home", "హోమ్")) })
+                    NavigationBarItem(selected = page == "tests", onClick = { page = "tests" }, icon = { Text("✓") }, label = { Text(tr("Tests", "పరీక్షలు")) })
+                    NavigationBarItem(selected = page == "report", onClick = { page = "report" }, icon = { Text("▤") }, label = { Text(tr("Report", "రిపోర్ట్")) })
                 }
             }
         ) { padding ->
-
             Column(
-                Modifier.padding(padding)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-
                 when (page) {
-
                     "home" -> {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = panel
-                            ),
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Column(
-                                Modifier.fillMaxWidth().padding(18.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    tr("DEVICE OVERVIEW", "ఫోన్ వివరాలు"),
-                                    color = Accent,
-                                    fontWeight = FontWeight.Bold
-                                )
-
-                                Text(
-                                    data.model,
-                                    color = fg,
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-
-                                Text(
-                                    "Android ${data.android} • ${data.manufacturer}",
-                                    color = fg
-                                )
-
-                                Text(
-                                    "Build: ${data.build}",
-                                    color = Color.Gray,
-                                    fontSize = 11.sp
-                                )
-
+                        Card(colors = CardDefaults.cardColors(containerColor = panel), shape = RoundedCornerShape(20.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(tr("DEVICE OVERVIEW", "ఫోన్ వివరాలు"), color = Accent, fontWeight = FontWeight.Bold)
+                                Text(data.model, color = fg, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                Text("Android ${data.android} • ${data.manufacturer}", color = fg)
+                                Text("Build: ${data.build}", color = Color.Gray, fontSize = 11.sp)
                                 Spacer(Modifier.height(8.dp))
-
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        tr("Battery level", "బ్యాటరీ స్థాయి"),
-                                        color = fg
-                                    )
-                                    Text(
-                                        data.battery,
-                                        color = Good,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(tr("Battery level", "బ్యాటరీ స్థాయి"), color = fg)
+                                    Text(data.battery, color = Good, fontWeight = FontWeight.Bold)
                                 }
-
-                                LinearProgressIndicator(
-                                    progress = {
-                                        data.batteryPercent / 100f
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = Good
-                                )
+                                LinearProgressIndicator(progress = { data.batteryPercent / 100f }, modifier = Modifier.fillMaxWidth(), color = Good)
                             }
                         }
-
-                        Text(
-                            tr("Diagnostic Center", "డయాగ్నస్టిక్ సెంటర్"),
-                            color = fg,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-
+                        Text(tr("Diagnostic Center", "డయాగ్నస్టిక్ సెంటర్"), color = fg, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         val items = listOf(
                             Triple("battery", tr("Battery & Power", "బ్యాటరీ & పవర్"), "🔋"),
                             Triple("charger", tr("Charger Diagnostics", "ఛార్జర్ పరీక్షలు"), "🔌"),
@@ -328,83 +203,35 @@ fun DiagnosticHome() {
                             Triple("network", tr("Network", "నెట్‌వర్క్"), "⌁"),
                             Triple("performance", tr("CPU, RAM & Storage", "CPU, RAM & స్టోరేజ్"), "▤")
                         )
-
                         items.chunked(2).forEach { pair ->
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 pair.forEach { item ->
                                     Card(
-                                        modifier = Modifier.weight(1f)
-                                            .clickable { page = item.first },
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = panel
-                                        ),
+                                        modifier = Modifier.weight(1f).clickable { page = item.first },
+                                        colors = CardDefaults.cardColors(containerColor = panel),
                                         shape = RoundedCornerShape(16.dp)
                                     ) {
-                                        Column(
-                                            Modifier.fillMaxWidth().padding(14.dp),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
+                                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Text(item.third, fontSize = 25.sp)
-                                            Text(
-                                                item.second,
-                                                color = fg,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                            Text(
-                                                tr("Open diagnostics", "పరీక్ష తెరవండి"),
-                                                color = Accent,
-                                                fontSize = 11.sp
-                                            )
+                                            Text(item.second, color = fg, fontWeight = FontWeight.SemiBold)
+                                            Text(tr("Open diagnostics", "పరీక్ష తెరవండి"), color = Accent, fontSize = 11.sp)
                                         }
                                     }
                                 }
                                 if (pair.size == 1) Spacer(Modifier.weight(1f))
                             }
                         }
-
-                        Text(
-                            tr("Quick actions", "త్వరిత చర్యలు"),
-                            color = fg,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-
-                        ActionButton(
-                            tr("Start screen colour test", "స్క్రీన్ రంగుల పరీక్ష")
-                        ) {
-                            screenTest = true
-                        }
-
-                        ActionButton(
-                            tr("Open battery settings", "బ్యాటరీ సెట్టింగ్స్")
-                        ) {
-                            safeStart(
-                                context,
-                                Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
-                            )
+                        Text(tr("Quick actions", "త్వరిత చర్యలు"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        ActionButton(tr("Start screen colour test", "స్క్రీన్ రంగుల పరీక్ష")) { screenTest = true }
+                        ActionButton(tr("Open battery settings", "బ్యాటరీ సెట్టింగ్స్")) {
+                            safeStart(context, Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS))
                         }
                     }
 
                     "battery" -> {
-                        PageTitle(
-                            tr("Battery & Power Analyzer", "బ్యాటరీ & పవర్ విశ్లేషణ"),
-                            fg
-                        )
-
-                        Text(
-                            tr("LIVE • 2 SECOND REFRESH", "లైవ్ • 2 సెకన్ల రిఫ్రెష్"),
-                            color = Good,
-                            fontSize = 11.sp
-                        )
-
-                        MetricCard(
-                            tr("Battery level", "బ్యాటరీ స్థాయి"),
-                            data.battery,
-                            data.temperature,
-                            panel,
-                            fg
-                        )
-
+                        PageTitle(tr("Battery & Power Analyzer", "బ్యాటరీ & పవర్ విశ్లేషణ"), fg)
+                        Text(tr("LIVE • 2 SECOND REFRESH", "లైవ్ • 2 సెకన్ల రిఫ్రెష్"), color = Good, fontSize = 11.sp)
+                        MetricCard(tr("Battery level", "బ్యాటరీ స్థాయి"), data.battery, data.temperature, panel, fg)
                         Info(tr("Charging status", "ఛార్జింగ్ స్థితి"), data.charging)
                         Info(tr("Battery health reported by Android", "Android తెలిపిన బ్యాటరీ స్థితి"), data.batteryHealth)
                         Info(tr("Voltage", "వోల్టేజ్"), data.batteryVoltage)
@@ -413,326 +240,132 @@ fun DiagnosticHome() {
                         Info(tr("Charge counter", "ఛార్జ్ కౌంటర్"), data.batteryCharge)
                         Info(tr("Charging source", "ఛార్జింగ్ సోర్స్"), data.chargingSource)
                         Info(tr("Technology", "టెక్నాలజీ"), data.batteryTechnology)
-
-                        Note(
-                            tr(
-                                "Current is displayed with the original sign reported by Android.",
-                                "Android ఇచ్చిన అసలు Current signనే చూపిస్తున్నాం."
-                            )
-                        )
-
-                        Note(
-                            tr(
-                                "Charge counter is not full battery capacity or battery health percentage.",
-                                "Charge Counter అనేది మొత్తం బ్యాటరీ సామర్థ్యం లేదా Battery Health శాతం కాదు."
-                            )
-                        )
+                        Note(tr("Current is displayed with the original sign reported by Android.", "Android ఇచ్చిన అసలు Current signనే చూపిస్తున్నాం."))
+                        Note(tr("Charge counter is not full battery capacity or battery health percentage.", "Charge Counter అనేది మొత్తం బ్యాటరీ సామర్థ్యం లేదా Battery Health శాతం కాదు."))
                     }
 
                     "charger" -> {
-                        PageTitle(
-                            tr("Charger Diagnostics", "ఛార్జర్ పరీక్షలు"),
-                            fg
-                        )
-
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                tr("LIVE MONITORING", "లైవ్ మానిటరింగ్"),
-                                color = Good,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "2 sec refresh",
-                                color = Accent,
-                                fontSize = 11.sp
-                            )
+                        PageTitle(tr("Charger Diagnostics", "ఛార్జర్ పరీక్షలు"), fg)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(tr("LIVE MONITORING", "లైవ్ మానిటరింగ్"), color = Good, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("2 sec refresh", color = Accent, fontSize = 11.sp)
                         }
-
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = panel
-                            ),
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Column(
-                                Modifier.fillMaxWidth().padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    tr("CHARGING TYPE", "ఛార్జింగ్ రకం"),
-                                    color = Accent,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    data.chargingType,
-                                    color = fg,
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    data.charging,
-                                    color = Good,
-                                    fontWeight = FontWeight.Bold
-                                )
+                        Card(colors = CardDefaults.cardColors(containerColor = panel), shape = RoundedCornerShape(18.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(tr("CHARGING TYPE", "ఛార్జింగ్ రకం"), color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(data.chargingType, color = fg, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                                Text(data.charging, color = Good, fontWeight = FontWeight.Bold)
                             }
                         }
-
-                        Text(
-                            tr("Connection Information", "కనెక్షన్ వివరాలు"),
-                            color = fg,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-
+                        Text(tr("Connection Information", "కనెక్షన్ వివరాలు"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Info(tr("Charging Type", "ఛార్జింగ్ రకం"), data.chargingType)
                         Info(tr("Power Source", "పవర్ సోర్స్"), data.chargingSource)
                         Info(tr("Electrical Input", "ఎలక్ట్రికల్ ఇన్‌పుట్"), data.electricalInput)
                         Info(tr("Charging Status", "ఛార్జింగ్ స్థితి"), data.charging)
-
                         HorizontalDivider()
-
-                        Text(
-                            tr("Battery Electrical Readings", "బ్యాటరీ ఎలక్ట్రికల్ రీడింగ్స్"),
-                            color = fg,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-
+                        Text(tr("Battery Electrical Readings", "బ్యాటరీ ఎలక్ట్రికల్ రీడింగ్స్"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Info(tr("Battery Voltage", "బ్యాటరీ వోల్టేజ్"), data.batteryVoltage)
                         Info(tr("Battery Current", "బ్యాటరీ కరెంట్"), data.batteryCurrent)
                         Info(tr("Battery-side Power", "బ్యాటరీ పవర్"), data.batteryPower)
-
                         HorizontalDivider()
-
-                        Text(
-                            tr("Charger Output Readings", "ఛార్జర్ అవుట్‌పుట్ రీడింగ్స్"),
-                            color = fg,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-
+                        Text(tr("Charger Output Readings", "ఛార్జర్ అవుట్‌పుట్ రీడింగ్స్"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Info(tr("Charger Output Voltage", "ఛార్జర్ అవుట్‌పుట్ వోల్టేజ్"), data.chargerOutputVoltage)
                         Info(tr("Charger Output Current", "ఛార్జర్ అవుట్‌పుట్ కరెంట్"), data.chargerOutputCurrent)
                         Info(tr("Charger Output Power", "ఛార్జర్ అవుట్‌పుట్ వాట్స్"), data.chargerOutputPower)
                         Info(tr("Charging Protocol", "ఛార్జింగ్ ప్రోటోకాల్"), data.chargingProtocol)
-
                         HorizontalDivider()
-
-                        Text(
-                            tr("Battery Information", "బ్యాటరీ వివరాలు"),
-                            color = fg,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-
+                        Text(tr("Battery Information", "బ్యాటరీ వివరాలు"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Info(tr("Battery Level", "బ్యాటరీ స్థాయి"), data.battery)
                         Info(tr("Battery Temperature", "బ్యాటరీ ఉష్ణోగ్రత"), data.temperature)
                         Info(tr("Battery Technology", "బ్యాటరీ టెక్నాలజీ"), data.batteryTechnology)
-
-                        Note(
-                            tr(
-                                "Battery-side power is calculated from battery voltage and current. It is not charger output power.",
-                                "Battery Voltage, Current ఆధారంగా లెక్కించినది Battery-side Power మాత్రమే. ఇది Charger Output Power కాదు."
-                            )
-                        )
-
-                        Note(
-                            tr(
-                                "Android public APIs do not expose actual VOOC/SUPERVOOC protocol or charger output readings on every device.",
-                                "ప్రతి ఫోన్‌లో VOOC/SUPERVOOC ప్రోటోకాల్ లేదా Charger Output readings Android API ద్వారా లభించవు."
-                            )
-                        )
+                        Note(tr("Battery-side power is calculated from battery voltage and current. It is not charger output power.", "Battery Voltage, Current ఆధారంగా లెక్కించినది Battery-side Power మాత్రమే. ఇది Charger Output Power కాదు."))
+                        Note(tr("Android public APIs do not expose actual VOOC/SUPERVOOC protocol or charger output readings on every device.", "ప్రతి ఫోన్‌లో VOOC/SUPERVOOC ప్రోటోకాల్ లేదా Charger Output readings Android API ద్వారా లభించవు."))
                     }
 
                     "display" -> {
                         PageTitle(tr("Display & Touch Test", "డిస్‌ప్లే & టచ్ పరీక్ష"), fg)
-
-                        Note(
-                            tr(
-                                "Inspect the screen using solid colours. Dead pixels must be checked visually.",
-                                "రంగుల పరీక్షతో స్క్రీన్‌ను పరిశీలించండి. Dead Pixels‌ను కళ్లతో తనిఖీ చేయాలి."
-                            )
-                        )
-
-                        ActionButton(
-                            tr("Start full-screen colour test", "పూర్తి స్క్రీన్ రంగుల పరీక్ష")
-                        ) {
-                            screenTest = true
-                        }
-
-                        ActionButton(tr("Open display settings", "డిస్‌ప్లే సెట్టింగ్స్")) {
-                            safeStart(context, Intent(Settings.ACTION_DISPLAY_SETTINGS))
-                        }
+                        Note(tr("Inspect the screen using solid colours. Dead pixels must be checked visually.", "రంగుల పరీక్షతో స్క్రీన్‌ను పరిశీలించండి. Dead Pixels‌ను కళ్లతో తనిఖీ చేయాలి."))
+                        ActionButton(tr("Start full-screen colour test", "పూర్తి స్క్రీన్ రంగుల పరీక్ష")) { screenTest = true }
+                        ActionButton(tr("Open display settings", "డిస్‌ప్లే సెట్టింగ్స్")) { safeStart(context, Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
                     }
 
                     "audio" -> {
                         PageTitle(tr("Speaker & Audio Test", "స్పీకర్ & ఆడియో పరీక్ష"), fg)
-
-                        Note(
-                            tr(
-                                "Set a safe volume before testing.",
-                                "పరీక్షకు ముందు సురక్షితమైన వాల్యూమ్ పెట్టండి."
-                            )
-                        )
-
-                        ActionButton(
-                            tr("Play speaker test tone", "స్పీకర్ టెస్ట్ శబ్దం")
-                        ) {
+                        Note(tr("Set a safe volume before testing.", "పరీక్షకు ముందు సురక్షితమైన వాల్యూమ్ పెట్టండి."))
+                        ActionButton(tr("Play speaker test tone", "స్పీకర్ టెస్ట్ శబ్దం")) {
                             try {
-                                val tone = ToneGenerator(
-                                    AudioManager.STREAM_MUSIC, 60
-                                )
-                                tone.startTone(
-                                    ToneGenerator.TONE_PROP_BEEP, 700
-                                )
-
-                                Toast.makeText(
-                                    context,
-                                    tr("Test tone played", "టెస్ట్ శబ్దం ప్లే అయింది"),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-
-                                android.os.Handler(
-                                    android.os.Looper.getMainLooper()
-                                ).postDelayed({
-                                    tone.release()
-                                }, 1000)
-
+                                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 60)
+                                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 700)
+                                Toast.makeText(context, tr("Test tone played", "టెస్ట్ శబ్దం ప్లే అయింది"), Toast.LENGTH_SHORT).show()
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 1000)
                             } catch (_: Exception) {
-                                Toast.makeText(
-                                    context,
-                                    "Audio test unavailable",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                Toast.makeText(context, "Audio test unavailable", Toast.LENGTH_SHORT).show()
                             }
                         }
-
-                        ActionButton(tr("Open sound settings", "సౌండ్ సెట్టింగ్స్")) {
-                            safeStart(context, Intent(Settings.ACTION_SOUND_SETTINGS))
-                        }
+                        ActionButton(tr("Open sound settings", "సౌండ్ సెట్టింగ్స్")) { safeStart(context, Intent(Settings.ACTION_SOUND_SETTINGS)) }
                     }
 
                     "camera" -> {
                         PageTitle(tr("Camera & Flash Test", "కెమెరా & ఫ్లాష్ పరీక్ష"), fg)
-
                         Info(tr("Camera feature", "కెమెరా ఫీచర్"), data.camera)
                         Info(tr("Microphone feature", "మైక్రోఫోన్ ఫీచర్"), data.microphone)
                         Info(tr("Flash feature", "ఫ్లాష్ ఫీచర్"), data.flash)
-
-                        ActionButton(tr("Open camera app", "కెమెరా తెరవండి")) {
-                            safeStart(
-                                context,
-                                Intent("android.media.action.IMAGE_CAPTURE")
-                            )
-                        }
-
-                        Note(
-                            tr(
-                                "Feature availability does not prove every camera lens or flash works.",
-                                "Feature అందుబాటులో ఉందని చూపించడం మాత్రమే అన్ని కెమెరా లెన్స్‌లు పనిచేస్తున్నాయని నిరూపించదు."
-                            )
-                        )
+                        ActionButton(tr("Open camera app", "కెమెరా తెరవండి")) { safeStart(context, Intent("android.media.action.IMAGE_CAPTURE")) }
+                        Note(tr("Feature availability does not prove every camera lens or flash works.", "Feature అందుబాటులో ఉందని చూపించడం మాత్రమే అన్ని కెమెరా లెన్స్‌లు పనిచేస్తున్నాయని నిరూపించదు."))
                     }
 
                     "sensors" -> {
                         PageTitle(tr("Sensor Diagnostics", "సెన్సార్ పరీక్షలు"), fg)
-
                         Info(tr("Sensors detected", "గుర్తించిన సెన్సార్లు"), data.sensorCount)
-
-                        data.sensors.forEach {
-                            Info(it.first, it.second)
-                        }
-
-                        Note(
-                            tr(
-                                "Sensors are detected by Android. Live sensor response testing is not included.",
-                                "సెన్సార్లను Android గుర్తించింది. Live Sensor Response Test ఇంకా లేదు."
-                            )
-                        )
+                        data.sensors.forEach { Info(it.first, it.second) }
+                        Note(tr("Sensors are detected by Android. Live sensor response testing is not included.", "సెన్సార్లను Android గుర్తించింది. Live Sensor Response Test ఇంకా లేదు."))
                     }
 
                     "network" -> {
                         PageTitle(tr("Network Diagnostics", "నెట్‌వర్క్ పరీక్షలు"), fg)
-
-                        Text(
-                            tr("LIVE • 2 SECOND REFRESH", "లైవ్ • 2 సెకన్ల రిఫ్రెష్"),
-                            color = Good,
-                            fontSize = 11.sp
-                        )
-
-                        Text(
-                            tr("Connection Overview", "కనెక్షన్ వివరాలు"),
-                            color = fg,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-
+                        Text(tr("LIVE • 2 SECOND REFRESH", "లైవ్ • 2 సెకన్ల రిఫ్రెష్"), color = Good, fontSize = 11.sp)
+                        Text(tr("Connection Overview", "కనెక్షన్ వివరాలు"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Info(tr("Connection", "కనెక్షన్"), data.network)
                         Info(tr("Active Transport", "యాక్టివ్ నెట్‌వర్క్"), data.transport)
                         Info(tr("Internet validated", "ఇంటర్నెట్ నిర్ధారణ"), data.internet)
-
                         HorizontalDivider()
-
-                        Text(
-                            tr("Mobile Network", "మొబైల్ నెట్‌వర్క్"),
-                            color = fg,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-
+                        Text(tr("SIM & Mobile Network", "SIM & మొబైల్ నెట్‌వర్క్"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Info(tr("Mobile Network Type", "మొబైల్ నెట్‌వర్క్ రకం"), data.mobileNetworkType)
-                        Info(tr("Mobile Data Connected", "మొబైల్ డేటా కనెక్షన్"), data.mobileConnected)
-
+                        Info(tr("Mobile Data Active Path", "మొబైల్ డేటా కనెక్షన్"), data.mobileConnected)
+                        if (data.sims.isEmpty()) {
+                            Info(tr("SIM details", "SIM వివరాలు"), data.simPermissionMessage)
+                        } else {
+                            data.sims.forEach { sim ->
+                                Card(colors = CardDefaults.cardColors(containerColor = panel), shape = RoundedCornerShape(14.dp)) {
+                                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        Text(sim.title, color = Accent, fontWeight = FontWeight.Bold)
+                                        Info(tr("SIM status", "SIM స్థితి"), sim.simState)
+                                        Info(tr("Operator name", "ఆపరేటర్ పేరు"), sim.operatorName)
+                                        Info(tr("Network name", "నెట్‌వర్క్ పేరు"), sim.networkName)
+                                        Info(tr("Registration", "నెట్‌వర్క్ రిజిస్ట్రేషన్"), sim.registration)
+                                        Info(tr("Network type", "నెట్‌వర్క్ రకం"), sim.networkType)
+                                        Info(tr("Roaming", "రోమింగ్"), sim.roaming)
+                                    }
+                                }
+                            }
+                        }
                         HorizontalDivider()
-
-                        Text(
-                            tr("Wi-Fi Diagnostics", "Wi-Fi వివరాలు"),
-                            color = fg,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-
+                        Text(tr("Wi-Fi Diagnostics", "Wi-Fi వివరాలు"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Info(tr("Wi-Fi Status", "Wi-Fi స్థితి"), data.wifiStatus)
                         Info(tr("Wi-Fi Band", "Wi-Fi బ్యాండ్"), data.wifiBand)
+                        Info(tr("Wi-Fi Standard", "Wi-Fi స్టాండర్డ్"), data.wifiStandard)
                         Info(tr("Frequency", "ఫ్రీక్వెన్సీ"), data.wifiFrequency)
                         Info(tr("Channel", "ఛానల్"), data.wifiChannel)
                         Info(tr("Link Speed", "లింక్ స్పీడ్"), data.wifiLinkSpeed)
                         Info(tr("Signal Strength", "సిగ్నల్ బలం"), data.wifiSignalStrength)
-
-                        Note(
-                            tr(
-                                "Android may report LTE when 5G NSA is active. 5G NSA identification depends on device firmware.",
-                                "కొన్ని ఫోన్లలో 5G NSA ఉన్నా Android LTE అని చూపించవచ్చు. ఇది ఫోన్ Firmwareపై ఆధారపడి ఉంటుంది."
-                            )
-                        )
-
-                        Note(
-                            tr(
-                                "Wi-Fi channel is calculated from the reported frequency.",
-                                "Wi-Fi Frequency ఆధారంగా Channel లెక్కించబడుతుంది."
-                            )
-                        )
-
-                        ActionButton(tr("Open Wi-Fi settings", "Wi-Fi సెట్టింగ్స్")) {
-                            safeStart(context, Intent(Settings.ACTION_WIFI_SETTINGS))
-                        }
-
-                        ActionButton(tr("Open Bluetooth settings", "Bluetooth సెట్టింగ్స్")) {
-                            safeStart(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                        }
+                        Note(tr("Wi-Fi 6E uses Wi-Fi 6 (802.11ax) on the 6 GHz band. Wi-Fi 7 is 802.11be.", "Wi-Fi 6E అనేది 6GHz బ్యాండ్‌లో Wi-Fi 6 (802.11ax). Wi-Fi 7 అనేది 802.11be."))
+                        Note(tr("Android may report LTE when 5G NSA is active. Identification depends on device firmware and carrier.", "కొన్ని ఫోన్లలో 5G NSA ఉన్నా Android LTE అని చూపించవచ్చు. ఇది ఫోన్ Firmware, నెట్‌వర్క్‌పై ఆధారపడి ఉంటుంది."))
+                        ActionButton(tr("Open Wi-Fi settings", "Wi-Fi సెట్టింగ్స్")) { safeStart(context, Intent(Settings.ACTION_WIFI_SETTINGS)) }
+                        ActionButton(tr("Open Bluetooth settings", "Bluetooth సెట్టింగ్స్")) { safeStart(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
                     }
 
                     "performance" -> {
-                        PageTitle(
-                            tr("Performance & Device Info", "పెర్ఫార్మెన్స్ & ఫోన్ వివరాలు"),
-                            fg
-                        )
-
+                        PageTitle(tr("Performance & Device Info", "పెర్ఫార్మెన్స్ & ఫోన్ వివరాలు"), fg)
                         Info("CPU ABI", data.abi)
                         Info(tr("Supported ABIs", "సపోర్ట్ చేసే ABIలు"), data.abis)
                         Info(tr("Total RAM", "మొత్తం RAM"), data.ramTotal)
@@ -741,15 +374,11 @@ fun DiagnosticHome() {
                         Info(tr("Free storage", "ఖాళీ స్టోరేజ్"), data.storageFree)
                         Info(tr("Kernel", "కెర్నల్"), data.kernel)
                         Info(tr("Security patch", "సెక్యూరిటీ ప్యాచ్"), data.securityPatch)
-                        Info(
-                            tr("Device / Product", "డివైస్ / ప్రొడక్ట్"),
-                            "${data.device} / ${data.product}"
-                        )
+                        Info(tr("Device / Product", "డివైస్ / ప్రొడక్ట్"), "${data.device} / ${data.product}")
                     }
 
                     "tests" -> {
                         PageTitle(tr("All Diagnostic Tests", "అన్ని డయాగ్నస్టిక్ పరీక్షలు"), fg)
-
                         val testItems = listOf(
                             "battery" to tr("Battery & Power", "బ్యాటరీ & పవర్"),
                             "charger" to tr("Charger Diagnostics", "ఛార్జర్ పరీక్షలు"),
@@ -760,17 +389,11 @@ fun DiagnosticHome() {
                             "network" to tr("Network", "నెట్‌వర్క్"),
                             "performance" to tr("CPU, RAM & Storage", "CPU, RAM & స్టోరేజ్")
                         )
-
-                        testItems.forEach { item ->
-                            ActionButton(item.second) {
-                                page = item.first
-                            }
-                        }
+                        testItems.forEach { item -> ActionButton(item.second) { page = item.first } }
                     }
 
                     "report" -> {
                         PageTitle(tr("Diagnostic Summary", "డయాగ్నస్టిక్ సారాంశం"), fg)
-
                         Info(tr("Device", "ఫోన్"), data.model)
                         Info(tr("Android version", "ఆండ్రాయిడ్ వెర్షన్"), data.android)
                         Info(tr("Battery", "బ్యాటరీ"), data.battery)
@@ -785,135 +408,53 @@ fun DiagnosticHome() {
                         Info(tr("Network", "నెట్‌వర్క్"), data.network)
                         Info(tr("Mobile Network", "మొబైల్ నెట్‌వర్క్"), data.mobileNetworkType)
                         Info(tr("Wi-Fi Band", "Wi-Fi బ్యాండ్"), data.wifiBand)
+                        Info(tr("Wi-Fi Standard", "Wi-Fi స్టాండర్డ్"), data.wifiStandard)
                         Info(tr("Wi-Fi Channel", "Wi-Fi ఛానల్"), data.wifiChannel)
+                        Info(tr("SIM count", "SIM సంఖ్య"), data.sims.size.toString())
                         Info(tr("Sensors detected", "సెన్సార్లు"), data.sensorCount)
                         Info(tr("Available RAM", "ఖాళీ RAM"), data.ramFree)
                         Info(tr("Free storage", "ఖాళీ స్టోరేజ్"), data.storageFree)
-
-                        Note(
-                            tr(
-                                "This is an information summary, not a certified hardware pass/fail report.",
-                                "ఇది సమాచార సారాంశం మాత్రమే; అధికారిక Hardware Pass/Fail రిపోర్ట్ కాదు."
-                            )
-                        )
-
-                        ActionButton(tr("Refresh report", "రిపోర్ట్ రిఫ్రెష్")) {
-                            refresh++
-                        }
+                        Note(tr("This is an information summary, not a certified hardware pass/fail report.", "ఇది సమాచార సారాంశం మాత్రమే; అధికారిక Hardware Pass/Fail రిపోర్ట్ కాదు."))
+                        ActionButton(tr("Refresh report", "రిపోర్ట్ రిఫ్రెష్")) { refresh++ }
                     }
                 }
-
                 Spacer(Modifier.height(8.dp))
-
-                Text(
-                    "Mobile Doctor Pro • Version 1.5.1",
-                    color = Color.Gray,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                    fontSize = 11.sp
-                )
+                Text("Mobile Doctor Pro • Version 1.5.3", color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally), fontSize = 11.sp)
             }
         }
     }
 }
 
-// DATA MODEL
-
 data class Diagnostics(
-    val model: String,
-    val manufacturer: String,
-    val android: String,
-    val build: String,
-
-    val battery: String,
-    val batteryPercent: Int,
-    val temperature: String,
-    val charging: String,
-    val batteryHealth: String,
-    val batteryVoltage: String,
-    val batteryCurrent: String,
-    val batteryAverageCurrent: String,
-    val batteryCharge: String,
-    val chargingSource: String,
-    val batteryTechnology: String,
-
-    val chargingType: String,
-    val electricalInput: String,
-    val batteryPower: String,
-    val chargerOutputVoltage: String,
-    val chargerOutputCurrent: String,
-    val chargerOutputPower: String,
-    val chargingProtocol: String,
-
-    val ramTotal: String,
-    val ramFree: String,
-    val storageTotal: String,
-    val storageFree: String,
-
-    val abi: String,
-    val abis: String,
-    val securityPatch: String,
-    val kernel: String,
-    val device: String,
-    val product: String,
-
-    val network: String,
-    val transport: String,
-    val internet: String,
-
-    val mobileNetworkType: String,
-    val mobileConnected: String,
-    val wifiStatus: String,
-    val wifiBand: String,
-    val wifiFrequency: String,
-    val wifiChannel: String,
-    val wifiLinkSpeed: String,
-    val wifiSignalStrength: String,
-
-    val sensorCount: String,
-    val sensors: List<Pair<String, String>>,
-
-    val camera: String,
-    val microphone: String,
-    val flash: String
+    val model: String, val manufacturer: String, val android: String, val build: String,
+    val battery: String, val batteryPercent: Int, val temperature: String, val charging: String,
+    val batteryHealth: String, val batteryVoltage: String, val batteryCurrent: String,
+    val batteryAverageCurrent: String, val batteryCharge: String, val chargingSource: String,
+    val batteryTechnology: String, val chargingType: String, val electricalInput: String,
+    val batteryPower: String, val chargerOutputVoltage: String, val chargerOutputCurrent: String,
+    val chargerOutputPower: String, val chargingProtocol: String,
+    val ramTotal: String, val ramFree: String, val storageTotal: String, val storageFree: String,
+    val abi: String, val abis: String, val securityPatch: String, val kernel: String,
+    val device: String, val product: String, val network: String, val transport: String,
+    val internet: String, val mobileNetworkType: String, val mobileConnected: String,
+    val sims: List<SimDetails>, val simPermissionMessage: String,
+    val wifiStatus: String, val wifiBand: String, val wifiStandard: String,
+    val wifiFrequency: String, val wifiChannel: String, val wifiLinkSpeed: String,
+    val wifiSignalStrength: String, val sensorCount: String,
+    val sensors: List<Pair<String, String>>, val camera: String,
+    val microphone: String, val flash: String
 )
-
-// COLLECT DIAGNOSTICS
 
 @Suppress("DEPRECATION")
 fun collectDiagnostics(context: Context): Diagnostics {
-
-    val batteryIntent = context.registerReceiver(
-        null,
-        IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-    )
-
-    val level = batteryIntent?.getIntExtra(
-        BatteryManager.EXTRA_LEVEL, -1
-    ) ?: -1
-
-    val scale = batteryIntent?.getIntExtra(
-        BatteryManager.EXTRA_SCALE, -1
-    ) ?: -1
-
-    val pct = if (level >= 0 && scale > 0) {
-        level * 100 / scale
-    } else -1
-
-    val batteryText =
-        if (pct >= 0) "$pct%" else "Unavailable"
-
-    val temp = batteryIntent?.getIntExtra(
-        BatteryManager.EXTRA_TEMPERATURE, -1
-    ) ?: -1
-
-    val tempText = if (temp in 0..1000) {
-        "${DecimalFormat("0.0").format(temp / 10.0)} °C"
-    } else "Unavailable"
-
-    val status = batteryIntent?.getIntExtra(
-        BatteryManager.EXTRA_STATUS, -1
-    ) ?: -1
-
+    val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+    val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+    val pct = if (level >= 0 && scale > 0) level * 100 / scale else -1
+    val batteryText = if (pct >= 0) "$pct%" else "Unavailable"
+    val temp = batteryIntent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1) ?: -1
+    val tempText = if (temp in 0..1000) "${DecimalFormat("0.0").format(temp / 10.0)} °C" else "Unavailable"
+    val status = batteryIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
     val charging = when (status) {
         BatteryManager.BATTERY_STATUS_CHARGING -> "Charging"
         BatteryManager.BATTERY_STATUS_FULL -> "Full"
@@ -921,16 +462,7 @@ fun collectDiagnostics(context: Context): Diagnostics {
         BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "Not charging"
         else -> "Unknown"
     }
-
-    val isCharging =
-        status == BatteryManager.BATTERY_STATUS_CHARGING ||
-        status == BatteryManager.BATTERY_STATUS_FULL
-
-    val health = when (
-        batteryIntent?.getIntExtra(
-            BatteryManager.EXTRA_HEALTH, -1
-        ) ?: -1
-    ) {
+    val health = when (batteryIntent?.getIntExtra(BatteryManager.EXTRA_HEALTH, -1) ?: -1) {
         BatteryManager.BATTERY_HEALTH_GOOD -> "Good (reported)"
         BatteryManager.BATTERY_HEALTH_OVERHEAT -> "Overheat"
         BatteryManager.BATTERY_HEALTH_DEAD -> "Dead"
@@ -938,78 +470,35 @@ fun collectDiagnostics(context: Context): Diagnostics {
         BatteryManager.BATTERY_HEALTH_COLD -> "Cold"
         else -> "Unknown"
     }
-
-    val bm = context.getSystemService(
-        Context.BATTERY_SERVICE
-    ) as BatteryManager
-
-    val voltage = batteryIntent?.getIntExtra(
-        BatteryManager.EXTRA_VOLTAGE, -1
-    ) ?: -1
-
+    val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+    val voltage = batteryIntent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
     val voltageValid = voltage in 2500..5000
+    val voltageText = if (voltageValid) "$voltage mV" else "Unavailable"
 
-    val voltageText =
-        if (voltageValid) "$voltage mV" else "Unavailable"
-
-    fun property(id: Int): Long? {
-        return try {
-            bm.getLongProperty(id).takeIf {
-                it != Long.MIN_VALUE
-            }
-        } catch (_: Exception) {
-            null
-        }
-    }
+    fun property(id: Int): Long? = try {
+        bm.getLongProperty(id).takeIf { it != Long.MIN_VALUE }
+    } catch (_: Exception) { null }
 
     fun currentText(value: Long?): String {
-        if (value == null ||
-            abs(value.toDouble()) > 10_000_000.0
-        ) return "Unavailable"
-
-        return if (abs(value.toDouble()) < 1000.0) {
-            "$value µA"
-        } else {
-            "${DecimalFormat("0.0").format(value / 1000.0)} mA"
-        }
+        if (value == null || abs(value.toDouble()) > 10_000_000.0) return "Unavailable"
+        return if (abs(value.toDouble()) < 1000.0) "$value µA"
+        else "${DecimalFormat("0.0").format(value / 1000.0)} mA"
     }
 
-    val current = property(
-        BatteryManager.BATTERY_PROPERTY_CURRENT_NOW
-    )
-
-    val average = property(
-        BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE
-    )
-
-    val charge = property(
-        BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER
-    )
-
+    val current = property(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+    val average = property(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE)
+    val charge = property(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
     val currentTextValue = currentText(current)
     val averageText = currentText(average)
-
     val chargeText = charge?.let {
-        if (it > 0) {
-            "${DecimalFormat("0.0").format(it / 1000.0)} mAh"
-        } else "Unavailable"
+        if (it > 0) "${DecimalFormat("0.0").format(it / 1000.0)} mAh" else "Unavailable"
     } ?: "Unavailable"
 
-    val plugged = batteryIntent?.getIntExtra(
-        BatteryManager.EXTRA_PLUGGED, 0
-    ) ?: 0
-
-    val isWireless =
-        (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0
-
-    val isUsb =
-        (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0
-
-    val isAc =
-        (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0
-
+    val plugged = batteryIntent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+    val isWireless = (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0
+    val isUsb = (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0
+    val isAc = (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0
     val connectedToPower = plugged != 0
-
     val source = when {
         !connectedToPower -> "Not connected"
         isWireless -> "Wireless"
@@ -1017,342 +506,218 @@ fun collectDiagnostics(context: Context): Diagnostics {
         isUsb -> "USB"
         else -> "Unknown"
     }
-
     val chargingType = when {
         !connectedToPower -> "Not Connected"
         isWireless -> "Wireless"
         isUsb || isAc -> "Wired"
         else -> "Unknown"
     }
-
     val electricalInput = when {
         !connectedToPower -> "No input"
         isWireless -> "DC (wireless receiver)"
         isUsb || isAc -> "DC (phone-side)"
         else -> "Unknown"
     }
-
-    val batteryPower = if (
-        voltageValid && current != null &&
-        abs(current.toDouble()) <= 10_000_000.0
-    ) {
-        val watts = voltage.toDouble() *
-            current.toDouble() / 1_000_000_000.0
-
+    val batteryPower = if (voltageValid && current != null && abs(current.toDouble()) <= 10_000_000.0) {
+        val watts = voltage.toDouble() * current.toDouble() / 1_000_000_000.0
         "${DecimalFormat("0.00").format(abs(watts))} W"
     } else "Unavailable"
 
-    val chargerOutputVoltage = "Unavailable"
-    val chargerOutputCurrent = "Unavailable"
-    val chargerOutputPower = "Unavailable"
-    val protocol = "Not detected"
-
-    val technology = batteryIntent?.getStringExtra(
-        BatteryManager.EXTRA_TECHNOLOGY
-    ) ?: "Unavailable"
-
-    // RAM
-
-    val am = context.getSystemService(
-        Context.ACTIVITY_SERVICE
-    ) as ActivityManager
-
+    val technology = batteryIntent?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY) ?: "Unavailable"
+    val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     val mi = ActivityManager.MemoryInfo()
     am.getMemoryInfo(mi)
-
-    // STORAGE
-
     val stat = StatFs(Environment.getDataDirectory().path)
+    fun gb(bytes: Long) = "${DecimalFormat("0.00").format(bytes / 1_073_741_824.0)} GB"
 
-    fun gb(bytes: Long) =
-        "${DecimalFormat("0.00").format(bytes / 1_073_741_824.0)} GB"
+    val sm = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    val sensorList = sm.getSensorList(Sensor.TYPE_ALL).map { it.name to "Detected • ${it.vendor}" }.distinctBy { it.first }
 
-    // SENSORS
-
-    val sm = context.getSystemService(
-        Context.SENSOR_SERVICE
-    ) as SensorManager
-
-    val sensorList = sm.getSensorList(
-        Sensor.TYPE_ALL
-    ).map {
-        it.name to "Detected • ${it.vendor}"
-    }.distinctBy {
-        it.first
-    }
-
-    // NETWORK OVERVIEW
-
-    val cm = context.getSystemService(
-        Context.CONNECTIVITY_SERVICE
-    ) as ConnectivityManager
-
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     val caps = cm.getNetworkCapabilities(cm.activeNetwork)
-
-    val wifi = caps?.hasTransport(
-        NetworkCapabilities.TRANSPORT_WIFI
-    ) == true
-
-    val cell = caps?.hasTransport(
-        NetworkCapabilities.TRANSPORT_CELLULAR
-    ) == true
-
-    val ethernet = caps?.hasTransport(
-        NetworkCapabilities.TRANSPORT_ETHERNET
-    ) == true
-
-    val network =
-        if (wifi || cell || ethernet) "Connected"
-        else "No active network"
-
+    val wifi = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+    val cell = caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
+    val ethernet = caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true
+    val network = if (wifi || cell || ethernet) "Connected" else "No active network"
     val transport = listOfNotNull(
         if (wifi) "Wi-Fi" else null,
         if (cell) "Cellular" else null,
         if (ethernet) "Ethernet" else null
-    ).ifEmpty {
-        listOf("Unknown / offline")
-    }.joinToString(", ")
+    ).ifEmpty { listOf("Unknown / offline") }.joinToString(", ")
+    val internet = if (caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true) "Yes" else "Not confirmed"
 
-    val internet =
-        if (caps?.hasCapability(
-                NetworkCapabilities.NET_CAPABILITY_VALIDATED
-            ) == true
-        ) "Yes" else "Not confirmed"
-
-    // MOBILE NETWORK TYPE
-
+    val hasPhonePermission = context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
     val mobileNetworkType: String
     val mobileConnected: String
-
     if (!cell) {
-        mobileConnected = "Not active"
-        mobileNetworkType = "Not connected"
+        mobileConnected = "Cellular is not the active internet path"
+        mobileNetworkType = getDefaultNetworkType(context, hasPhonePermission)
     } else {
         mobileConnected = "Connected"
+        mobileNetworkType = getDefaultNetworkType(context, hasPhonePermission)
+    }
 
-        mobileNetworkType = try {
-            if (
-                context.checkSelfPermission(
-                    Manifest.permission.READ_PHONE_STATE
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                val tm = context.getSystemService(
-                    Context.TELEPHONY_SERVICE
-                ) as TelephonyManager
-
-                when (tm.dataNetworkType) {
-                    TelephonyManager.NETWORK_TYPE_NR ->
-                        "5G (NR)"
-
-                    TelephonyManager.NETWORK_TYPE_LTE ->
-                        "4G (LTE)"
-
-                    TelephonyManager.NETWORK_TYPE_UMTS,
-                    TelephonyManager.NETWORK_TYPE_HSDPA,
-                    TelephonyManager.NETWORK_TYPE_HSUPA,
-                    TelephonyManager.NETWORK_TYPE_HSPA,
-                    TelephonyManager.NETWORK_TYPE_HSPAP,
-                    TelephonyManager.NETWORK_TYPE_TD_SCDMA,
-                    TelephonyManager.NETWORK_TYPE_EVDO_0,
-                    TelephonyManager.NETWORK_TYPE_EVDO_A,
-                    TelephonyManager.NETWORK_TYPE_EVDO_B,
-                    TelephonyManager.NETWORK_TYPE_EHRPD ->
-                        "3G"
-
-                    TelephonyManager.NETWORK_TYPE_GPRS,
-                    TelephonyManager.NETWORK_TYPE_EDGE,
-                    TelephonyManager.NETWORK_TYPE_CDMA,
-                    TelephonyManager.NETWORK_TYPE_1xRTT,
-                    TelephonyManager.NETWORK_TYPE_IDEN ->
-                        "2G"
-
+    val simPermissionMessage: String
+    val sims = if (!hasPhonePermission) {
+        simPermissionMessage = "Grant Phone permission to read SIM details"
+        emptyList()
+    } else {
+        try {
+            val smgr = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+            val active = smgr.activeSubscriptionInfoList.orEmpty()
+            simPermissionMessage = if (active.isEmpty()) "No active SIM detected" else ""
+            active.mapIndexed { index, info ->
+                val tmBase = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+                val tm = tmBase.createForSubscriptionId(info.subscriptionId)
+                val simState = when (tm.simState) {
+                    TelephonyManager.SIM_STATE_READY -> "Ready"
+                    TelephonyManager.SIM_STATE_ABSENT -> "Absent"
+                    TelephonyManager.SIM_STATE_PIN_REQUIRED -> "PIN required"
+                    TelephonyManager.SIM_STATE_PUK_REQUIRED -> "PUK required"
+                    TelephonyManager.SIM_STATE_NETWORK_LOCKED -> "Network locked"
                     else -> "Unknown"
                 }
-            } else {
-                "Permission required"
+                val serviceState = try { tm.serviceState?.state } catch (_: Exception) { null }
+                val registration = when (serviceState) {
+                    android.telephony.ServiceState.STATE_IN_SERVICE -> "Registered"
+                    android.telephony.ServiceState.STATE_OUT_OF_SERVICE -> "Not registered (out of service)"
+                    android.telephony.ServiceState.STATE_EMERGENCY_ONLY -> "Emergency only"
+                    android.telephony.ServiceState.STATE_POWER_OFF -> "Radio off"
+                    else -> "Unknown / unavailable"
+                }
+                val type = try { networkTypeName(tm.dataNetworkType) } catch (_: Exception) { "Unavailable" }
+                SimDetails(
+                    title = "SIM ${index + 1}${info.displayName?.toString()?.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}",
+                    simState = simState,
+                    operatorName = info.carrierName?.toString()?.takeIf { it.isNotBlank() } ?: tm.simOperatorName?.takeIf { it.isNotBlank() } ?: "Unavailable",
+                    networkName = tm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "Unavailable",
+                    registration = registration,
+                    networkType = type,
+                    roaming = if (tm.isNetworkRoaming) "Yes" else "No"
+                )
             }
+        } catch (_: SecurityException) {
+            simPermissionMessage = "SIM details permission unavailable"
+            emptyList()
         } catch (_: Exception) {
-            "Unavailable"
+            simPermissionMessage = "SIM details unavailable on this device"
+            emptyList()
         }
     }
 
-    // WI-FI DETAILS
-
-    val wifiManager = context.applicationContext.getSystemService(
-        Context.WIFI_SERVICE
-    ) as WifiManager
-
-    val wifiInfo = try {
-        wifiManager.connectionInfo
-    } catch (_: Exception) {
-        null
-    }
-
-    val wifiStatus =
-        if (wifi) "Connected" else "Not connected"
-
-    val frequency = if (wifi && wifiInfo != null) {
-        wifiInfo.frequency
-    } else 0
-
+    val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    val wifiInfo = try { wifiManager.connectionInfo } catch (_: Exception) { null }
+    val wifiStatus = if (wifi) "Connected" else "Not connected"
+    val frequency = if (wifi && wifiInfo != null) wifiInfo.frequency else 0
     val wifiBand = when {
         !wifi -> "Not connected"
         frequency in 2400..2500 -> "2.4 GHz"
-        frequency in 4900..5900 -> "5 GHz"
+        frequency in 4900..5924 -> "5 GHz"
         frequency in 5925..7125 -> "6 GHz"
         else -> "Unknown"
     }
-
-    val wifiFrequency =
-        if (wifi && frequency > 0) "$frequency MHz"
-        else "Unavailable"
-
+    val wifiFrequency = if (wifi && frequency > 0) "$frequency MHz" else "Unavailable"
     val wifiChannel = if (wifi && frequency > 0) {
-        when (frequency) {
-            2484 -> "14"
-            in 2412..2472 -> ((frequency - 2407) / 5).toString()
-            in 5000..5900 -> ((frequency - 5000) / 5).toString()
-            in 5925..7125 -> ((frequency - 5950) / 5).toString()
+        when {
+            frequency == 2484 -> "14"
+            frequency in 2412..2472 -> ((frequency - 2407) / 5).toString()
+            frequency in 5000..5924 -> ((frequency - 5000) / 5).toString()
+            frequency == 5935 -> "2"
+            frequency in 5955..7115 -> ((frequency - 5950) / 5).toString()
             else -> "Unknown"
         }
     } else "Unavailable"
-
-    val wifiLinkSpeed =
-        if (wifi && wifiInfo != null && wifiInfo.linkSpeed > 0) {
-            "${wifiInfo.linkSpeed} Mbps"
-        } else "Unavailable"
-
-    val wifiSignalStrength =
-        if (wifi && wifiInfo != null && wifiInfo.rssi > -127) {
-            "${wifiInfo.rssi} dBm"
-        } else "Unavailable"
-
-    // CAMERA / MICROPHONE / FLASH
+    val wifiStandard = if (!wifi || wifiInfo == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        "Unavailable"
+    } else {
+        when (wifiInfo.wifiStandard) {
+            1 -> "Legacy"
+            4 -> "Wi-Fi 4 (802.11n)"
+            5 -> "Wi-Fi 5 (802.11ac)"
+            6 -> if (frequency in 5925..7125) "Wi-Fi 6E (802.11ax)" else "Wi-Fi 6 (802.11ax)"
+            7 -> "WiGig (802.11ad)"
+            8 -> if (Build.VERSION.SDK_INT >= 33) "Wi-Fi 7 (802.11be)" else "802.11be (Wi-Fi 7)"
+            else -> "Unknown"
+        }
+    }
+    val wifiLinkSpeed = if (wifi && wifiInfo != null && wifiInfo.linkSpeed > 0) "${wifiInfo.linkSpeed} Mbps" else "Unavailable"
+    val wifiSignalStrength = if (wifi && wifiInfo != null && wifiInfo.rssi > -127) "${wifiInfo.rssi} dBm" else "Unavailable"
 
     val pm = context.packageManager
-
-    val camera =
-        if (pm.hasSystemFeature("android.hardware.camera.any"))
-            "Present (declared)" else "Not reported"
-
-    val microphone =
-        if (pm.hasSystemFeature("android.hardware.microphone"))
-            "Present (declared)" else "Not reported"
-
-    val flash =
-        if (pm.hasSystemFeature("android.hardware.camera.flash"))
-            "Present (declared)" else "Not reported"
+    val camera = if (pm.hasSystemFeature("android.hardware.camera.any")) "Present (declared)" else "Not reported"
+    val microphone = if (pm.hasSystemFeature("android.hardware.microphone")) "Present (declared)" else "Not reported"
+    val flash = if (pm.hasSystemFeature("android.hardware.camera.flash")) "Present (declared)" else "Not reported"
 
     return Diagnostics(
-        model = "${Build.BRAND} ${Build.MODEL}",
-        manufacturer = Build.MANUFACTURER,
-        android = Build.VERSION.RELEASE ?: "Unknown",
-        build = Build.DISPLAY ?: "Unknown",
-
-        battery = batteryText,
-        batteryPercent = pct.coerceIn(0, 100),
-        temperature = tempText,
-        charging = charging,
-        batteryHealth = health,
-        batteryVoltage = voltageText,
-        batteryCurrent = currentTextValue,
-        batteryAverageCurrent = averageText,
-        batteryCharge = chargeText,
-        chargingSource = source,
-        batteryTechnology = technology,
-
-        chargingType = chargingType,
-        electricalInput = electricalInput,
-        batteryPower = batteryPower,
-        chargerOutputVoltage = chargerOutputVoltage,
-        chargerOutputCurrent = chargerOutputCurrent,
-        chargerOutputPower = chargerOutputPower,
-        chargingProtocol = protocol,
-
-        ramTotal = gb(mi.totalMem),
-        ramFree = gb(mi.availMem),
-        storageTotal = gb(stat.totalBytes),
-        storageFree = gb(stat.availableBytes),
-
-        abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "Unknown",
-        abis = Build.SUPPORTED_ABIS.joinToString(", "),
-        securityPatch = Build.VERSION.SECURITY_PATCH,
-        kernel = System.getProperty("os.version") ?: "Unknown",
-        device = Build.DEVICE,
-        product = Build.PRODUCT,
-
-        network = network,
-        transport = transport,
-        internet = internet,
-
-        mobileNetworkType = mobileNetworkType,
-        mobileConnected = mobileConnected,
-        wifiStatus = wifiStatus,
-        wifiBand = wifiBand,
-        wifiFrequency = wifiFrequency,
-        wifiChannel = wifiChannel,
-        wifiLinkSpeed = wifiLinkSpeed,
-        wifiSignalStrength = wifiSignalStrength,
-
-        sensorCount = sensorList.size.toString(),
-        sensors = sensorList,
-
-        camera = camera,
-        microphone = microphone,
-        flash = flash
+        model = "${Build.BRAND} ${Build.MODEL}", manufacturer = Build.MANUFACTURER,
+        android = Build.VERSION.RELEASE ?: "Unknown", build = Build.DISPLAY ?: "Unknown",
+        battery = batteryText, batteryPercent = pct.coerceIn(0, 100), temperature = tempText,
+        charging = charging, batteryHealth = health, batteryVoltage = voltageText,
+        batteryCurrent = currentTextValue, batteryAverageCurrent = averageText, batteryCharge = chargeText,
+        chargingSource = source, batteryTechnology = technology, chargingType = chargingType,
+        electricalInput = electricalInput, batteryPower = batteryPower,
+        chargerOutputVoltage = "Unavailable", chargerOutputCurrent = "Unavailable",
+        chargerOutputPower = "Unavailable", chargingProtocol = "Not detected",
+        ramTotal = gb(mi.totalMem), ramFree = gb(mi.availMem),
+        storageTotal = gb(stat.totalBytes), storageFree = gb(stat.availableBytes),
+        abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "Unknown", abis = Build.SUPPORTED_ABIS.joinToString(", "),
+        securityPatch = Build.VERSION.SECURITY_PATCH, kernel = System.getProperty("os.version") ?: "Unknown",
+        device = Build.DEVICE, product = Build.PRODUCT, network = network, transport = transport,
+        internet = internet, mobileNetworkType = mobileNetworkType, mobileConnected = mobileConnected,
+        sims = sims, simPermissionMessage = simPermissionMessage,
+        wifiStatus = wifiStatus, wifiBand = wifiBand, wifiStandard = wifiStandard,
+        wifiFrequency = wifiFrequency, wifiChannel = wifiChannel, wifiLinkSpeed = wifiLinkSpeed,
+        wifiSignalStrength = wifiSignalStrength, sensorCount = sensorList.size.toString(),
+        sensors = sensorList, camera = camera, microphone = microphone, flash = flash
     )
 }
 
-// REUSABLE UI
+@Suppress("DEPRECATION")
+private fun getDefaultNetworkType(context: Context, hasPermission: Boolean): String {
+    if (!hasPermission) return "Permission required"
+    return try {
+        val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        networkTypeName(tm.dataNetworkType)
+    } catch (_: Exception) { "Unavailable" }
+}
+
+private fun networkTypeName(type: Int): String = when (type) {
+    TelephonyManager.NETWORK_TYPE_NR -> "5G (NR)"
+    TelephonyManager.NETWORK_TYPE_LTE -> "4G (LTE)"
+    TelephonyManager.NETWORK_TYPE_UMTS,
+    TelephonyManager.NETWORK_TYPE_HSDPA,
+    TelephonyManager.NETWORK_TYPE_HSUPA,
+    TelephonyManager.NETWORK_TYPE_HSPA,
+    TelephonyManager.NETWORK_TYPE_HSPAP,
+    TelephonyManager.NETWORK_TYPE_TD_SCDMA,
+    TelephonyManager.NETWORK_TYPE_EVDO_0,
+    TelephonyManager.NETWORK_TYPE_EVDO_A,
+    TelephonyManager.NETWORK_TYPE_EVDO_B,
+    TelephonyManager.NETWORK_TYPE_EHRPD -> "3G"
+    TelephonyManager.NETWORK_TYPE_GPRS,
+    TelephonyManager.NETWORK_TYPE_EDGE,
+    TelephonyManager.NETWORK_TYPE_CDMA,
+    TelephonyManager.NETWORK_TYPE_1xRTT,
+    TelephonyManager.NETWORK_TYPE_IDEN -> "2G"
+    else -> "Unknown"
+}
 
 @Composable
 private fun PageTitle(title: String, color: Color) {
-    Text(
-        title,
-        color = color,
-        fontSize = 21.sp,
-        fontWeight = FontWeight.Bold
-    )
+    Text(title, color = color, fontSize = 21.sp, fontWeight = FontWeight.Bold)
 }
 
 @Composable
-private fun ActionButton(
-    text: String,
-    onClick: () -> Unit
-) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(text)
-    }
+private fun ActionButton(text: String, onClick: () -> Unit) {
+    Button(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(text) }
 }
 
 @Composable
-private fun MetricCard(
-    title: String,
-    value: String,
-    sub: String,
-    panel: Color,
-    fg: Color
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = panel
-        )
-    ) {
-        Column(
-            Modifier.fillMaxWidth().padding(16.dp)
-        ) {
+private fun MetricCard(title: String, value: String, sub: String, panel: Color, fg: Color) {
+    Card(colors = CardDefaults.cardColors(containerColor = panel)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text(title, color = fg)
-
-            Text(
-                value,
-                color = Good,
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Bold
-            )
-
+            Text(value, color = Good, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             Text(sub, color = fg, fontSize = 13.sp)
         }
     }
@@ -1360,59 +725,27 @@ private fun MetricCard(
 
 @Composable
 private fun Info(label: String, value: String) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Row(
-            Modifier.fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Top
         ) {
-            Text(
-                label,
-                modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.onSurface.copy(
-                    alpha = 0.75f
-                ),
-                fontSize = 13.sp
-            )
-
-            Text(
-                value,
-                modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Medium,
-                fontSize = 13.sp
-            )
+            Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), fontSize = 13.sp)
+            Text(value, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium, fontSize = 13.sp)
         }
     }
 }
 
 @Composable
 private fun Note(text: String) {
-    Text(
-        text,
-        color = Color(0xFFB58A32),
-        fontSize = 12.sp
-    )
+    Text(text, color = Color(0xFFB58A32), fontSize = 12.sp)
 }
 
-// SAFE ACTIVITY LAUNCHER
-
-private fun safeStart(
-    context: Context,
-    intent: Intent
-) {
+private fun safeStart(context: Context, intent: Intent) {
     try {
         context.startActivity(intent)
     } catch (_: Exception) {
-        Toast.makeText(
-            context,
-            "This setting or app is unavailable",
-            Toast.LENGTH_SHORT
-        ).show()
+        Toast.makeText(context, "This setting or app is unavailable", Toast.LENGTH_SHORT).show()
     }
 }
