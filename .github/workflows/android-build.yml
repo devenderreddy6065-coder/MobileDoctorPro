@@ -49,10 +49,10 @@ jobs:
           ls -la source
           test -f source/app/build.gradle.kts
 
-      - name: Fix Java Kotlin version mismatch
+      -       - name: Fix Java Kotlin version mismatch
         run: |
-          printf '\ntasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach { sourceCompatibility = "17"; targetCompatibility = "17" }\n' >> source/app/build.gradle.kts
-          
+          sed -i 's/VERSION_1_8/VERSION_17/g' source/app/build.gradle.kts
+          grep -nE 'VERSION_|jvmTarget|sourceCompatibility|targetCompatibility' source/app/build.gradle.kts
 
       - name: Build APK
         working-directory: source
