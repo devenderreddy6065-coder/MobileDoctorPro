@@ -76,7 +76,6 @@ fun DiagnosticHome() {
             refresh++
         }
 
-    // Live refresh
     LaunchedEffect(page) {
         if (page == "battery" ||
             page == "charger" ||
@@ -89,7 +88,6 @@ fun DiagnosticHome() {
         }
     }
 
-    // Ask phone permission only when Network page is opened
     LaunchedEffect(page) {
         if (page == "network" &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
@@ -304,7 +302,9 @@ fun DiagnosticHome() {
                                 }
 
                                 LinearProgressIndicator(
-                                    progress = { data.batteryPercent / 100f },
+                                    progress = {
+                                        data.batteryPercent / 100f
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                     color = Good
                                 )
@@ -453,7 +453,9 @@ fun DiagnosticHome() {
                         }
 
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = panel),
+                            colors = CardDefaults.cardColors(
+                                containerColor = panel
+                            ),
                             shape = RoundedCornerShape(18.dp)
                         ) {
                             Column(
@@ -654,8 +656,6 @@ fun DiagnosticHome() {
                         )
                     }
 
-                    // UPDATED NETWORK SECTION
-
                     "network" -> {
                         PageTitle(tr("Network Diagnostics", "నెట్‌వర్క్ పరీక్షలు"), fg)
 
@@ -685,15 +685,8 @@ fun DiagnosticHome() {
                             fontSize = 18.sp
                         )
 
-                        Info(
-                            tr("Mobile Network Type", "మొబైల్ నెట్‌వర్క్ రకం"),
-                            data.mobileNetworkType
-                        )
-
-                        Info(
-                            tr("Mobile Data Connected", "మొబైల్ డేటా కనెక్షన్"),
-                            data.mobileConnected
-                        )
+                        Info(tr("Mobile Network Type", "మొబైల్ నెట్‌వర్క్ రకం"), data.mobileNetworkType)
+                        Info(tr("Mobile Data Connected", "మొబైల్ డేటా కనెక్షన్"), data.mobileConnected)
 
                         HorizontalDivider()
 
@@ -713,8 +706,8 @@ fun DiagnosticHome() {
 
                         Note(
                             tr(
-                                "Mobile network type is based on Android telephony information. Some carriers may report 4G while 5G NSA is active.",
-                                "Mobile Network Type Android ఇచ్చే వివరాలపై ఆధారపడి ఉంటుంది. కొన్ని సందర్భాల్లో 5G NSA ఉన్నా 4Gగా కనిపించవచ్చు."
+                                "Android may report LTE when 5G NSA is active. 5G NSA identification depends on device firmware.",
+                                "కొన్ని ఫోన్లలో 5G NSA ఉన్నా Android LTE అని చూపించవచ్చు. ఇది ఫోన్ Firmwareపై ఆధారపడి ఉంటుంది."
                             )
                         )
 
@@ -813,7 +806,7 @@ fun DiagnosticHome() {
                 Spacer(Modifier.height(8.dp))
 
                 Text(
-                    "Mobile Doctor Pro • Version 1.5",
+                    "Mobile Doctor Pro • Version 1.5.1",
                     color = Color.Gray,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                     fontSize = 11.sp
@@ -981,9 +974,17 @@ fun collectDiagnostics(context: Context): Diagnostics {
         }
     }
 
-    val current = property(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
-    val average = property(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE)
-    val charge = property(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+    val current = property(
+        BatteryManager.BATTERY_PROPERTY_CURRENT_NOW
+    )
+
+    val average = property(
+        BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE
+    )
+
+    val charge = property(
+        BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER
+    )
 
     val currentTextValue = currentText(current)
     val averageText = currentText(average)
@@ -1130,7 +1131,8 @@ fun collectDiagnostics(context: Context): Diagnostics {
         mobileConnected = "Connected"
 
         mobileNetworkType = try {
-            if (context.checkSelfPermission(
+            if (
+                context.checkSelfPermission(
                     Manifest.permission.READ_PHONE_STATE
                 ) == PackageManager.PERMISSION_GRANTED
             ) {
@@ -1138,51 +1140,34 @@ fun collectDiagnostics(context: Context): Diagnostics {
                     Context.TELEPHONY_SERVICE
                 ) as TelephonyManager
 
-                val type = tm.dataNetworkType
+                when (tm.dataNetworkType) {
+                    TelephonyManager.NETWORK_TYPE_NR ->
+                        "5G (NR)"
 
-                var result = when (type) {
-                    TelephonyManager.NETWORK_TYPE_NR -> "5G (NR)"
-
-                    TelephonyManager.NETWORK_TYPE_LTE,
-                    TelephonyManager.NETWORK_TYPE_LTE_CA -> "4G (LTE)"
+                    TelephonyManager.NETWORK_TYPE_LTE ->
+                        "4G (LTE)"
 
                     TelephonyManager.NETWORK_TYPE_UMTS,
-                    TelephonyManager.NETWORK_TYPE_HSPA,
                     TelephonyManager.NETWORK_TYPE_HSDPA,
                     TelephonyManager.NETWORK_TYPE_HSUPA,
+                    TelephonyManager.NETWORK_TYPE_HSPA,
                     TelephonyManager.NETWORK_TYPE_HSPAP,
+                    TelephonyManager.NETWORK_TYPE_TD_SCDMA,
                     TelephonyManager.NETWORK_TYPE_EVDO_0,
                     TelephonyManager.NETWORK_TYPE_EVDO_A,
                     TelephonyManager.NETWORK_TYPE_EVDO_B,
-                    TelephonyManager.NETWORK_TYPE_EHRPD,
-                    TelephonyManager.NETWORK_TYPE_TD_SCDMA -> "3G"
+                    TelephonyManager.NETWORK_TYPE_EHRPD ->
+                        "3G"
 
                     TelephonyManager.NETWORK_TYPE_GPRS,
                     TelephonyManager.NETWORK_TYPE_EDGE,
                     TelephonyManager.NETWORK_TYPE_CDMA,
                     TelephonyManager.NETWORK_TYPE_1xRTT,
-                    TelephonyManager.NETWORK_TYPE_IDEN -> "2G"
+                    TelephonyManager.NETWORK_TYPE_IDEN ->
+                        "2G"
 
                     else -> "Unknown"
                 }
-
-                // Android 11+ may expose 5G NSA override information
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    try {
-                        val displayInfo = tm.displayInfo
-                        if (
-                            displayInfo.overrideNetworkType ==
-                            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ||
-                            displayInfo.overrideNetworkType ==
-                            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE
-                        ) {
-                            result = "5G (NR NSA)"
-                        }
-                    } catch (_: Exception) {
-                    }
-                }
-
-                result
             } else {
                 "Permission required"
             }
@@ -1203,7 +1188,8 @@ fun collectDiagnostics(context: Context): Diagnostics {
         null
     }
 
-    val wifiStatus = if (wifi) "Connected" else "Not connected"
+    val wifiStatus =
+        if (wifi) "Connected" else "Not connected"
 
     val frequency = if (wifi && wifiInfo != null) {
         wifiInfo.frequency
@@ -1359,12 +1345,14 @@ private fun MetricCard(
             Modifier.fillMaxWidth().padding(16.dp)
         ) {
             Text(title, color = fg)
+
             Text(
                 value,
                 color = Good,
                 fontSize = 30.sp,
                 fontWeight = FontWeight.Bold
             )
+
             Text(sub, color = fg, fontSize = 13.sp)
         }
     }
