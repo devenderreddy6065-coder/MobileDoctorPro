@@ -3,7 +3,8 @@ name: Build MobileDoctorPro APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -11,6 +12,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -21,10 +23,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-            - name: Set up Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools'
+
       - name: Install Android SDK packages
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
 
@@ -34,7 +37,12 @@ jobs:
           gradle-version: '8.9'
 
       - name: Extract Android project
-        run: unzip -o MobileDoctorPro-Source-For-GitHub.zip -d source
+        run: unzip -o MobileDoctorPro--Source-For-GitHub.zip -d source
+
+      - name: Verify project files
+        run: |
+          ls -la source
+          test -f source/app/build.gradle.kts
 
       - name: Build APK
         working-directory: source
