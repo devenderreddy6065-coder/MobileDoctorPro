@@ -1,3 +1,4 @@
+
 name: Build MobileDoctorPro APK
 
 on:
@@ -43,6 +44,11 @@ jobs:
         run: |
           ls -la source
           test -f source/app/build.gradle.kts
+
+      - name: Fix Java Kotlin version mismatch
+        run: |
+          sed -i 's/VERSION_1_8/VERSION_17/g' source/app/build.gradle.kts
+          grep -n 'VERSION_' source/app/build.gradle.kts
 
       - name: Build APK
         working-directory: source
