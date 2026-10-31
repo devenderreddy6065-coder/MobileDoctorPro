@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private data class SimDetails(
+data class SimDetails(
     val title: String,
     val simState: String,
     val operatorName: String,
@@ -557,16 +557,13 @@ fun collectDiagnostics(context: Context): Diagnostics {
         mobileNetworkType = getDefaultNetworkType(context, hasPhonePermission)
     }
 
-    val simPermissionMessage: String
-    val sims = if (!hasPhonePermission) {
-        simPermissionMessage = "Grant Phone permission to read SIM details"
-        emptyList()
+    val simResult: Pair<List<SimDetails>, String> = if (!hasPhonePermission) {
+        emptyList<SimDetails>() to "Grant Phone permission to read SIM details"
     } else {
         try {
             val smgr = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
             val active = smgr.activeSubscriptionInfoList.orEmpty()
-            simPermissionMessage = if (active.isEmpty()) "No active SIM detected" else ""
-            active.mapIndexed { index, info ->
+            val details = active.mapIndexed { index, info ->
                 val tmBase = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
                 val tm = tmBase.createForSubscriptionId(info.subscriptionId)
                 val simState = when (tm.simState) {
@@ -596,14 +593,15 @@ fun collectDiagnostics(context: Context): Diagnostics {
                     roaming = if (tm.isNetworkRoaming) "Yes" else "No"
                 )
             }
+            details to if (details.isEmpty()) "No active SIM detected" else ""
         } catch (_: SecurityException) {
-            simPermissionMessage = "SIM details permission unavailable"
-            emptyList()
+            emptyList<SimDetails>() to "SIM details permission unavailable"
         } catch (_: Exception) {
-            simPermissionMessage = "SIM details unavailable on this device"
-            emptyList()
+            emptyList<SimDetails>() to "SIM details unavailable on this device"
         }
     }
+    val sims = simResult.first
+    val simPermissionMessage = simResult.second
 
     val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
     val wifiInfo = try { wifiManager.connectionInfo } catch (_: Exception) { null }
