@@ -53,6 +53,18 @@ jobs:
         run: |
           echo "----- app/build.gradle.kts -----"
           cat source/app/build.gradle.kts
+      
+      - name: Fix Java Kotlin version mismatch
+        run: |
+          cat >> source/app/build.gradle.kts <<'EOF'
+
+          tasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach {
+              sourceCompatibility = "17"
+              targetCompatibility = "17"
+          }
+          EOF
+          tail -n 8 source/app/build.gradle.kts
+     
       - name: Build APK
         working-directory: source
         run: gradle --no-daemon assembleDebug
