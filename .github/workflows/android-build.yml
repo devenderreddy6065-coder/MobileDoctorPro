@@ -38,7 +38,32 @@ jobs:
 
       - name: Extract Android project
         run: unzip -o MobileDoctorPro--Source-For-GitHub.zip -d source
-   
+  
+      - name: Add diagnostic permissions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("source/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+
+          permissions = [
+              "android.permission.ACCESS_NETWORK_STATE",
+              "android.permission.ACCESS_WIFI_STATE",
+              "android.permission.INTERNET",
+              "android.permission.READ_PHONE_STATE",
+              "android.permission.ACCESS_FINE_LOCATION"
+          ]
+
+          for permission in permissions:
+              tag = f'<uses-permission android:name="{permission}" />'
+              if permission not in s:
+                  s = s.replace("<application", f"    {tag}\n    <application", 1)
+
+          p.write_text(s)
+          print("Diagnostic permissions added successfully")
+          PY
+          
       - name: Copy latest MainActivity
         run: |
           mkdir -p source/app/src/main/java/com/mobiledoctorpro/app
