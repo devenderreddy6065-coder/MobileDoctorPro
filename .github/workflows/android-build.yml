@@ -53,6 +53,7 @@ jobs:
         run: |
           sed -i 's/VERSION_1_8/VERSION_17/g' source/app/build.gradle.kts
           grep -nE 'VERSION_|jvmTarget|sourceCompatibility|targetCompatibility' source/app/build.gradle.kts
+
       - name: Build APK
         working-directory: source
         run: gradle --no-daemon assembleDebug
