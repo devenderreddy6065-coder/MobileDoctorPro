@@ -39,7 +39,10 @@ jobs:
 
       - name: Extract Android project
         run: unzip -o MobileDoctorPro--Source-For-GitHub.zip -d source
- 
+       - name: Copy latest MainActivity
+        run: |
+          mkdir -p source/app/src/main/java/com/mobiledoctorpro/app
+          cp MainActivity.kt source/app/src/main/java/com/mobiledoctorpro/app/MainActivity.kt
       - name: Copy latest MainActivity
         run: |
           mkdir -p source/app/src/main/java/com/mobiledoctorpro/app
