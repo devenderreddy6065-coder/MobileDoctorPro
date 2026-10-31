@@ -1,14 +1,18 @@
 
 package com.mobiledoctorpro.app
 
+import android.Manifest
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
+import android.telephony.TelephonyManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -20,6 +24,8 @@ import android.media.ToneGenerator
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -63,13 +69,37 @@ fun DiagnosticHome() {
     var screenTest by remember { mutableStateOf(false) }
     var screenColor by remember { mutableIntStateOf(0) }
 
-    // Live refresh for battery and charger pages
+    val phonePermissionLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) {
+            refresh++
+        }
+
+    // Live refresh
     LaunchedEffect(page) {
-        if (page == "battery" || page == "charger") {
+        if (page == "battery" ||
+            page == "charger" ||
+            page == "network"
+        ) {
             while (true) {
                 delay(2000)
                 refresh++
             }
+        }
+    }
+
+    // Ask phone permission only when Network page is opened
+    LaunchedEffect(page) {
+        if (page == "network" &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            context.checkSelfPermission(
+                Manifest.permission.READ_PHONE_STATE
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            phonePermissionLauncher.launch(
+                Manifest.permission.READ_PHONE_STATE
+            )
         }
     }
 
@@ -155,7 +185,6 @@ fun DiagnosticHome() {
     ) {
         Scaffold(
             containerColor = bg,
-
             topBar = {
                 TopAppBar(
                     title = {
@@ -186,7 +215,6 @@ fun DiagnosticHome() {
                     }
                 )
             },
-
             bottomBar = {
                 NavigationBar(containerColor = panel) {
                     NavigationBarItem(
@@ -222,8 +250,6 @@ fun DiagnosticHome() {
             ) {
 
                 when (page) {
-
-                    // HOME
 
                     "home" -> {
                         Card(
@@ -332,7 +358,6 @@ fun DiagnosticHome() {
                                         }
                                     }
                                 }
-
                                 if (pair.size == 1) Spacer(Modifier.weight(1f))
                             }
                         }
@@ -359,8 +384,6 @@ fun DiagnosticHome() {
                             )
                         }
                     }
-
-                    // BATTERY
 
                     "battery" -> {
                         PageTitle(
@@ -406,10 +429,7 @@ fun DiagnosticHome() {
                         )
                     }
 
-                    // CHARGER DIAGNOSTICS
-
                     "charger" -> {
-
                         PageTitle(
                             tr("Charger Diagnostics", "ఛార్జర్ పరీక్షలు"),
                             fg
@@ -425,7 +445,6 @@ fun DiagnosticHome() {
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
-
                             Text(
                                 "2 sec refresh",
                                 color = Accent,
@@ -434,9 +453,7 @@ fun DiagnosticHome() {
                         }
 
                         Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = panel
-                            ),
+                            colors = CardDefaults.cardColors(containerColor = panel),
                             shape = RoundedCornerShape(18.dp)
                         ) {
                             Column(
@@ -449,14 +466,12 @@ fun DiagnosticHome() {
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-
                                 Text(
                                     data.chargingType,
                                     color = fg,
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-
                                 Text(
                                     data.charging,
                                     color = Good,
@@ -472,25 +487,10 @@ fun DiagnosticHome() {
                             fontSize = 18.sp
                         )
 
-                        Info(
-                            tr("Charging Type", "ఛార్జింగ్ రకం"),
-                            data.chargingType
-                        )
-
-                        Info(
-                            tr("Power Source", "పవర్ సోర్స్"),
-                            data.chargingSource
-                        )
-
-                        Info(
-                            tr("Electrical Input", "ఎలక్ట్రికల్ ఇన్‌పుట్"),
-                            data.electricalInput
-                        )
-
-                        Info(
-                            tr("Charging Status", "ఛార్జింగ్ స్థితి"),
-                            data.charging
-                        )
+                        Info(tr("Charging Type", "ఛార్జింగ్ రకం"), data.chargingType)
+                        Info(tr("Power Source", "పవర్ సోర్స్"), data.chargingSource)
+                        Info(tr("Electrical Input", "ఎలక్ట్రికల్ ఇన్‌పుట్"), data.electricalInput)
+                        Info(tr("Charging Status", "ఛార్జింగ్ స్థితి"), data.charging)
 
                         HorizontalDivider()
 
@@ -501,20 +501,9 @@ fun DiagnosticHome() {
                             fontSize = 18.sp
                         )
 
-                        Info(
-                            tr("Battery Voltage", "బ్యాటరీ వోల్టేజ్"),
-                            data.batteryVoltage
-                        )
-
-                        Info(
-                            tr("Battery Current", "బ్యాటరీ కరెంట్"),
-                            data.batteryCurrent
-                        )
-
-                        Info(
-                            tr("Battery-side Power", "బ్యాటరీ పవర్"),
-                            data.batteryPower
-                        )
+                        Info(tr("Battery Voltage", "బ్యాటరీ వోల్టేజ్"), data.batteryVoltage)
+                        Info(tr("Battery Current", "బ్యాటరీ కరెంట్"), data.batteryCurrent)
+                        Info(tr("Battery-side Power", "బ్యాటరీ పవర్"), data.batteryPower)
 
                         HorizontalDivider()
 
@@ -525,25 +514,10 @@ fun DiagnosticHome() {
                             fontSize = 18.sp
                         )
 
-                        Info(
-                            tr("Charger Output Voltage", "ఛార్జర్ అవుట్‌పుట్ వోల్టేజ్"),
-                            data.chargerOutputVoltage
-                        )
-
-                        Info(
-                            tr("Charger Output Current", "ఛార్జర్ అవుట్‌పుట్ కరెంట్"),
-                            data.chargerOutputCurrent
-                        )
-
-                        Info(
-                            tr("Charger Output Power", "ఛార్జర్ అవుట్‌పుట్ వాట్స్"),
-                            data.chargerOutputPower
-                        )
-
-                        Info(
-                            tr("Charging Protocol", "ఛార్జింగ్ ప్రోటోకాల్"),
-                            data.chargingProtocol
-                        )
+                        Info(tr("Charger Output Voltage", "ఛార్జర్ అవుట్‌పుట్ వోల్టేజ్"), data.chargerOutputVoltage)
+                        Info(tr("Charger Output Current", "ఛార్జర్ అవుట్‌పుట్ కరెంట్"), data.chargerOutputCurrent)
+                        Info(tr("Charger Output Power", "ఛార్జర్ అవుట్‌పుట్ వాట్స్"), data.chargerOutputPower)
+                        Info(tr("Charging Protocol", "ఛార్జింగ్ ప్రోటోకాల్"), data.chargingProtocol)
 
                         HorizontalDivider()
 
@@ -554,20 +528,9 @@ fun DiagnosticHome() {
                             fontSize = 18.sp
                         )
 
-                        Info(
-                            tr("Battery Level", "బ్యాటరీ స్థాయి"),
-                            data.battery
-                        )
-
-                        Info(
-                            tr("Battery Temperature", "బ్యాటరీ ఉష్ణోగ్రత"),
-                            data.temperature
-                        )
-
-                        Info(
-                            tr("Battery Technology", "బ్యాటరీ టెక్నాలజీ"),
-                            data.batteryTechnology
-                        )
+                        Info(tr("Battery Level", "బ్యాటరీ స్థాయి"), data.battery)
+                        Info(tr("Battery Temperature", "బ్యాటరీ ఉష్ణోగ్రత"), data.temperature)
+                        Info(tr("Battery Technology", "బ్యాటరీ టెక్నాలజీ"), data.batteryTechnology)
 
                         Note(
                             tr(
@@ -578,13 +541,11 @@ fun DiagnosticHome() {
 
                         Note(
                             tr(
-                                "Android public APIs do not expose the actual VOOC/SUPERVOOC protocol or charger output measurements on every device. Unsupported values are shown as Unavailable.",
-                                "ప్రతి ఫోన్‌లో VOOC/SUPERVOOC ప్రోటోకాల్ లేదా Charger Output readings Android API ద్వారా లభించవు. అందుబాటులో లేనివి Unavailableగా చూపిస్తాం."
+                                "Android public APIs do not expose actual VOOC/SUPERVOOC protocol or charger output readings on every device.",
+                                "ప్రతి ఫోన్‌లో VOOC/SUPERVOOC ప్రోటోకాల్ లేదా Charger Output readings Android API ద్వారా లభించవు."
                             )
                         )
                     }
-
-                    // DISPLAY
 
                     "display" -> {
                         PageTitle(tr("Display & Touch Test", "డిస్‌ప్లే & టచ్ పరీక్ష"), fg)
@@ -607,8 +568,6 @@ fun DiagnosticHome() {
                         }
                     }
 
-                    // AUDIO
-
                     "audio" -> {
                         PageTitle(tr("Speaker & Audio Test", "స్పీకర్ & ఆడియో పరీక్ష"), fg)
 
@@ -626,7 +585,6 @@ fun DiagnosticHome() {
                                 val tone = ToneGenerator(
                                     AudioManager.STREAM_MUSIC, 60
                                 )
-
                                 tone.startTone(
                                     ToneGenerator.TONE_PROP_BEEP, 700
                                 )
@@ -657,8 +615,6 @@ fun DiagnosticHome() {
                         }
                     }
 
-                    // CAMERA
-
                     "camera" -> {
                         PageTitle(tr("Camera & Flash Test", "కెమెరా & ఫ్లాష్ పరీక్ష"), fg)
 
@@ -681,8 +637,6 @@ fun DiagnosticHome() {
                         )
                     }
 
-                    // SENSORS
-
                     "sensors" -> {
                         PageTitle(tr("Sensor Diagnostics", "సెన్సార్ పరీక్షలు"), fg)
 
@@ -700,14 +654,76 @@ fun DiagnosticHome() {
                         )
                     }
 
-                    // NETWORK
+                    // UPDATED NETWORK SECTION
 
                     "network" -> {
                         PageTitle(tr("Network Diagnostics", "నెట్‌వర్క్ పరీక్షలు"), fg)
 
+                        Text(
+                            tr("LIVE • 2 SECOND REFRESH", "లైవ్ • 2 సెకన్ల రిఫ్రెష్"),
+                            color = Good,
+                            fontSize = 11.sp
+                        )
+
+                        Text(
+                            tr("Connection Overview", "కనెక్షన్ వివరాలు"),
+                            color = fg,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+
                         Info(tr("Connection", "కనెక్షన్"), data.network)
-                        Info(tr("Transport", "నెట్‌వర్క్ రకం"), data.transport)
+                        Info(tr("Active Transport", "యాక్టివ్ నెట్‌వర్క్"), data.transport)
                         Info(tr("Internet validated", "ఇంటర్నెట్ నిర్ధారణ"), data.internet)
+
+                        HorizontalDivider()
+
+                        Text(
+                            tr("Mobile Network", "మొబైల్ నెట్‌వర్క్"),
+                            color = fg,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+
+                        Info(
+                            tr("Mobile Network Type", "మొబైల్ నెట్‌వర్క్ రకం"),
+                            data.mobileNetworkType
+                        )
+
+                        Info(
+                            tr("Mobile Data Connected", "మొబైల్ డేటా కనెక్షన్"),
+                            data.mobileConnected
+                        )
+
+                        HorizontalDivider()
+
+                        Text(
+                            tr("Wi-Fi Diagnostics", "Wi-Fi వివరాలు"),
+                            color = fg,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+
+                        Info(tr("Wi-Fi Status", "Wi-Fi స్థితి"), data.wifiStatus)
+                        Info(tr("Wi-Fi Band", "Wi-Fi బ్యాండ్"), data.wifiBand)
+                        Info(tr("Frequency", "ఫ్రీక్వెన్సీ"), data.wifiFrequency)
+                        Info(tr("Channel", "ఛానల్"), data.wifiChannel)
+                        Info(tr("Link Speed", "లింక్ స్పీడ్"), data.wifiLinkSpeed)
+                        Info(tr("Signal Strength", "సిగ్నల్ బలం"), data.wifiSignalStrength)
+
+                        Note(
+                            tr(
+                                "Mobile network type is based on Android telephony information. Some carriers may report 4G while 5G NSA is active.",
+                                "Mobile Network Type Android ఇచ్చే వివరాలపై ఆధారపడి ఉంటుంది. కొన్ని సందర్భాల్లో 5G NSA ఉన్నా 4Gగా కనిపించవచ్చు."
+                            )
+                        )
+
+                        Note(
+                            tr(
+                                "Wi-Fi channel is calculated from the reported frequency.",
+                                "Wi-Fi Frequency ఆధారంగా Channel లెక్కించబడుతుంది."
+                            )
+                        )
 
                         ActionButton(tr("Open Wi-Fi settings", "Wi-Fi సెట్టింగ్స్")) {
                             safeStart(context, Intent(Settings.ACTION_WIFI_SETTINGS))
@@ -717,8 +733,6 @@ fun DiagnosticHome() {
                             safeStart(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
                         }
                     }
-
-                    // PERFORMANCE
 
                     "performance" -> {
                         PageTitle(
@@ -739,8 +753,6 @@ fun DiagnosticHome() {
                             "${data.device} / ${data.product}"
                         )
                     }
-
-                    // TESTS
 
                     "tests" -> {
                         PageTitle(tr("All Diagnostic Tests", "అన్ని డయాగ్నస్టిక్ పరీక్షలు"), fg)
@@ -763,8 +775,6 @@ fun DiagnosticHome() {
                         }
                     }
 
-                    // REPORT
-
                     "report" -> {
                         PageTitle(tr("Diagnostic Summary", "డయాగ్నస్టిక్ సారాంశం"), fg)
 
@@ -780,6 +790,9 @@ fun DiagnosticHome() {
                         Info(tr("Power Source", "పవర్ సోర్స్"), data.chargingSource)
                         Info(tr("Charger Output Power", "ఛార్జర్ అవుట్‌పుట్ వాట్స్"), data.chargerOutputPower)
                         Info(tr("Network", "నెట్‌వర్క్"), data.network)
+                        Info(tr("Mobile Network", "మొబైల్ నెట్‌వర్క్"), data.mobileNetworkType)
+                        Info(tr("Wi-Fi Band", "Wi-Fi బ్యాండ్"), data.wifiBand)
+                        Info(tr("Wi-Fi Channel", "Wi-Fi ఛానల్"), data.wifiChannel)
                         Info(tr("Sensors detected", "సెన్సార్లు"), data.sensorCount)
                         Info(tr("Available RAM", "ఖాళీ RAM"), data.ramFree)
                         Info(tr("Free storage", "ఖాళీ స్టోరేజ్"), data.storageFree)
@@ -800,7 +813,7 @@ fun DiagnosticHome() {
                 Spacer(Modifier.height(8.dp))
 
                 Text(
-                    "Mobile Doctor Pro • Version 1.4",
+                    "Mobile Doctor Pro • Version 1.5",
                     color = Color.Gray,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                     fontSize = 11.sp
@@ -854,6 +867,15 @@ data class Diagnostics(
     val transport: String,
     val internet: String,
 
+    val mobileNetworkType: String,
+    val mobileConnected: String,
+    val wifiStatus: String,
+    val wifiBand: String,
+    val wifiFrequency: String,
+    val wifiChannel: String,
+    val wifiLinkSpeed: String,
+    val wifiSignalStrength: String,
+
     val sensorCount: String,
     val sensors: List<Pair<String, String>>,
 
@@ -872,8 +894,6 @@ fun collectDiagnostics(context: Context): Diagnostics {
         IntentFilter(Intent.ACTION_BATTERY_CHANGED)
     )
 
-    // BATTERY LEVEL
-
     val level = batteryIntent?.getIntExtra(
         BatteryManager.EXTRA_LEVEL, -1
     ) ?: -1
@@ -884,14 +904,10 @@ fun collectDiagnostics(context: Context): Diagnostics {
 
     val pct = if (level >= 0 && scale > 0) {
         level * 100 / scale
-    } else {
-        -1
-    }
+    } else -1
 
     val batteryText =
         if (pct >= 0) "$pct%" else "Unavailable"
-
-    // TEMPERATURE
 
     val temp = batteryIntent?.getIntExtra(
         BatteryManager.EXTRA_TEMPERATURE, -1
@@ -899,11 +915,7 @@ fun collectDiagnostics(context: Context): Diagnostics {
 
     val tempText = if (temp in 0..1000) {
         "${DecimalFormat("0.0").format(temp / 10.0)} °C"
-    } else {
-        "Unavailable"
-    }
-
-    // STATUS
+    } else "Unavailable"
 
     val status = batteryIntent?.getIntExtra(
         BatteryManager.EXTRA_STATUS, -1
@@ -938,21 +950,14 @@ fun collectDiagnostics(context: Context): Diagnostics {
         Context.BATTERY_SERVICE
     ) as BatteryManager
 
-    // VOLTAGE
-
     val voltage = batteryIntent?.getIntExtra(
         BatteryManager.EXTRA_VOLTAGE, -1
     ) ?: -1
 
     val voltageValid = voltage in 2500..5000
 
-    val voltageText = if (voltageValid) {
-        "$voltage mV"
-    } else {
-        "Unavailable"
-    }
-
-    // CURRENT
+    val voltageText =
+        if (voltageValid) "$voltage mV" else "Unavailable"
 
     fun property(id: Int): Long? {
         return try {
@@ -967,9 +972,7 @@ fun collectDiagnostics(context: Context): Diagnostics {
     fun currentText(value: Long?): String {
         if (value == null ||
             abs(value.toDouble()) > 10_000_000.0
-        ) {
-            return "Unavailable"
-        }
+        ) return "Unavailable"
 
         return if (abs(value.toDouble()) < 1000.0) {
             "$value µA"
@@ -978,17 +981,9 @@ fun collectDiagnostics(context: Context): Diagnostics {
         }
     }
 
-    val current = property(
-        BatteryManager.BATTERY_PROPERTY_CURRENT_NOW
-    )
-
-    val average = property(
-        BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE
-    )
-
-    val charge = property(
-        BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER
-    )
+    val current = property(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+    val average = property(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE)
+    val charge = property(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
 
     val currentTextValue = currentText(current)
     val averageText = currentText(average)
@@ -996,12 +991,8 @@ fun collectDiagnostics(context: Context): Diagnostics {
     val chargeText = charge?.let {
         if (it > 0) {
             "${DecimalFormat("0.0").format(it / 1000.0)} mAh"
-        } else {
-            "Unavailable"
-        }
+        } else "Unavailable"
     } ?: "Unavailable"
-
-    // CHARGING SOURCE
 
     val plugged = batteryIntent?.getIntExtra(
         BatteryManager.EXTRA_PLUGGED, 0
@@ -1016,55 +1007,43 @@ fun collectDiagnostics(context: Context): Diagnostics {
     val isAc =
         (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0
 
+    val connectedToPower = plugged != 0
+
     val source = when {
-        !isCharging && plugged == 0 -> "Not connected"
+        !connectedToPower -> "Not connected"
         isWireless -> "Wireless"
         isAc -> "AC Adapter"
         isUsb -> "USB"
         else -> "Unknown"
     }
 
-    // WIRED / WIRELESS
-
     val chargingType = when {
-        !isCharging && plugged == 0 -> "Not Connected"
+        !connectedToPower -> "Not Connected"
         isWireless -> "Wireless"
         isUsb || isAc -> "Wired"
         else -> "Unknown"
     }
 
-    // PHONE SIDE INPUT IS DC
     val electricalInput = when {
-        !isCharging && plugged == 0 -> "No input"
+        !connectedToPower -> "No input"
         isWireless -> "DC (wireless receiver)"
         isUsb || isAc -> "DC (phone-side)"
         else -> "Unknown"
     }
 
-    // BATTERY-SIDE POWER CALCULATION
-    // Voltage mV * Current µA / 1,000,000,000 = Watts
-
     val batteryPower = if (
-        voltageValid &&
-        current != null &&
+        voltageValid && current != null &&
         abs(current.toDouble()) <= 10_000_000.0
     ) {
         val watts = voltage.toDouble() *
-                current.toDouble() / 1_000_000_000.0
+            current.toDouble() / 1_000_000_000.0
 
         "${DecimalFormat("0.00").format(abs(watts))} W"
-    } else {
-        "Unavailable"
-    }
-
-    // CHARGER OUTPUT VALUES
-    // Public Android API does not provide these reliably.
+    } else "Unavailable"
 
     val chargerOutputVoltage = "Unavailable"
     val chargerOutputCurrent = "Unavailable"
     val chargerOutputPower = "Unavailable"
-
-    // Protocol cannot be confirmed through standard public API.
     val protocol = "Not detected"
 
     val technology = batteryIntent?.getStringExtra(
@@ -1082,9 +1061,7 @@ fun collectDiagnostics(context: Context): Diagnostics {
 
     // STORAGE
 
-    val stat = StatFs(
-        Environment.getDataDirectory().path
-    )
+    val stat = StatFs(Environment.getDataDirectory().path)
 
     fun gb(bytes: Long) =
         "${DecimalFormat("0.00").format(bytes / 1_073_741_824.0)} GB"
@@ -1103,7 +1080,7 @@ fun collectDiagnostics(context: Context): Diagnostics {
         it.first
     }
 
-    // NETWORK
+    // NETWORK OVERVIEW
 
     val cm = context.getSystemService(
         Context.CONNECTIVITY_SERVICE
@@ -1139,11 +1116,130 @@ fun collectDiagnostics(context: Context): Diagnostics {
         if (caps?.hasCapability(
                 NetworkCapabilities.NET_CAPABILITY_VALIDATED
             ) == true
-        ) {
-            "Yes"
-        } else {
-            "Not confirmed"
+        ) "Yes" else "Not confirmed"
+
+    // MOBILE NETWORK TYPE
+
+    val mobileNetworkType: String
+    val mobileConnected: String
+
+    if (!cell) {
+        mobileConnected = "Not active"
+        mobileNetworkType = "Not connected"
+    } else {
+        mobileConnected = "Connected"
+
+        mobileNetworkType = try {
+            if (context.checkSelfPermission(
+                    Manifest.permission.READ_PHONE_STATE
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                val tm = context.getSystemService(
+                    Context.TELEPHONY_SERVICE
+                ) as TelephonyManager
+
+                val type = tm.dataNetworkType
+
+                var result = when (type) {
+                    TelephonyManager.NETWORK_TYPE_NR -> "5G (NR)"
+
+                    TelephonyManager.NETWORK_TYPE_LTE,
+                    TelephonyManager.NETWORK_TYPE_LTE_CA -> "4G (LTE)"
+
+                    TelephonyManager.NETWORK_TYPE_UMTS,
+                    TelephonyManager.NETWORK_TYPE_HSPA,
+                    TelephonyManager.NETWORK_TYPE_HSDPA,
+                    TelephonyManager.NETWORK_TYPE_HSUPA,
+                    TelephonyManager.NETWORK_TYPE_HSPAP,
+                    TelephonyManager.NETWORK_TYPE_EVDO_0,
+                    TelephonyManager.NETWORK_TYPE_EVDO_A,
+                    TelephonyManager.NETWORK_TYPE_EVDO_B,
+                    TelephonyManager.NETWORK_TYPE_EHRPD,
+                    TelephonyManager.NETWORK_TYPE_TD_SCDMA -> "3G"
+
+                    TelephonyManager.NETWORK_TYPE_GPRS,
+                    TelephonyManager.NETWORK_TYPE_EDGE,
+                    TelephonyManager.NETWORK_TYPE_CDMA,
+                    TelephonyManager.NETWORK_TYPE_1xRTT,
+                    TelephonyManager.NETWORK_TYPE_IDEN -> "2G"
+
+                    else -> "Unknown"
+                }
+
+                // Android 11+ may expose 5G NSA override information
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    try {
+                        val displayInfo = tm.displayInfo
+                        if (
+                            displayInfo.overrideNetworkType ==
+                            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA ||
+                            displayInfo.overrideNetworkType ==
+                            TelephonyDisplayInfo.OVERRIDE_NETWORK_TYPE_NR_NSA_MMWAVE
+                        ) {
+                            result = "5G (NR NSA)"
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+
+                result
+            } else {
+                "Permission required"
+            }
+        } catch (_: Exception) {
+            "Unavailable"
         }
+    }
+
+    // WI-FI DETAILS
+
+    val wifiManager = context.applicationContext.getSystemService(
+        Context.WIFI_SERVICE
+    ) as WifiManager
+
+    val wifiInfo = try {
+        wifiManager.connectionInfo
+    } catch (_: Exception) {
+        null
+    }
+
+    val wifiStatus = if (wifi) "Connected" else "Not connected"
+
+    val frequency = if (wifi && wifiInfo != null) {
+        wifiInfo.frequency
+    } else 0
+
+    val wifiBand = when {
+        !wifi -> "Not connected"
+        frequency in 2400..2500 -> "2.4 GHz"
+        frequency in 4900..5900 -> "5 GHz"
+        frequency in 5925..7125 -> "6 GHz"
+        else -> "Unknown"
+    }
+
+    val wifiFrequency =
+        if (wifi && frequency > 0) "$frequency MHz"
+        else "Unavailable"
+
+    val wifiChannel = if (wifi && frequency > 0) {
+        when (frequency) {
+            2484 -> "14"
+            in 2412..2472 -> ((frequency - 2407) / 5).toString()
+            in 5000..5900 -> ((frequency - 5000) / 5).toString()
+            in 5925..7125 -> ((frequency - 5950) / 5).toString()
+            else -> "Unknown"
+        }
+    } else "Unavailable"
+
+    val wifiLinkSpeed =
+        if (wifi && wifiInfo != null && wifiInfo.linkSpeed > 0) {
+            "${wifiInfo.linkSpeed} Mbps"
+        } else "Unavailable"
+
+    val wifiSignalStrength =
+        if (wifi && wifiInfo != null && wifiInfo.rssi > -127) {
+            "${wifiInfo.rssi} dBm"
+        } else "Unavailable"
 
     // CAMERA / MICROPHONE / FLASH
 
@@ -1203,6 +1299,15 @@ fun collectDiagnostics(context: Context): Diagnostics {
         transport = transport,
         internet = internet,
 
+        mobileNetworkType = mobileNetworkType,
+        mobileConnected = mobileConnected,
+        wifiStatus = wifiStatus,
+        wifiBand = wifiBand,
+        wifiFrequency = wifiFrequency,
+        wifiChannel = wifiChannel,
+        wifiLinkSpeed = wifiLinkSpeed,
+        wifiSignalStrength = wifiSignalStrength,
+
         sensorCount = sensorList.size.toString(),
         sensors = sensorList,
 
@@ -1254,14 +1359,12 @@ private fun MetricCard(
             Modifier.fillMaxWidth().padding(16.dp)
         ) {
             Text(title, color = fg)
-
             Text(
                 value,
                 color = Good,
                 fontSize = 30.sp,
                 fontWeight = FontWeight.Bold
             )
-
             Text(sub, color = fg, fontSize = 13.sp)
         }
     }
