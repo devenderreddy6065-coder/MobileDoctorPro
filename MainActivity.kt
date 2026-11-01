@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
 
 data class SimDetails(
     val title: String,
+    val hasSim: Boolean,
     val simState: String,
     val operatorName: String,
     val networkName: String,
@@ -329,22 +330,25 @@ fun DiagnosticHome() {
                         Info(tr("Active Transport", "యాక్టివ్ నెట్‌వర్క్"), data.transport)
                         Info(tr("Internet validated", "ఇంటర్నెట్ నిర్ధారణ"), data.internet)
                         HorizontalDivider()
-                        Text(tr("SIM & Mobile Network", "SIM & మొబైల్ నెట్‌వర్క్"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+              Text(tr("SIM & Mobile Network", "SIM & మొబైల్ నెట్‌వర్క్"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Info(tr("Mobile Network Type", "మొబైల్ నెట్‌వర్క్ రకం"), data.mobileNetworkType)
                         Info(tr("Mobile Data Active Path", "మొబైల్ డేటా కనెక్షన్"), data.mobileConnected)
-                        if (data.sims.isEmpty()) {
-                            Info(tr("SIM details", "SIM వివరాలు"), data.simPermissionMessage)
-                        } else {
-                            data.sims.forEach { sim ->
-                                Card(colors = CardDefaults.cardColors(containerColor = panel), shape = RoundedCornerShape(14.dp)) {
-                                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                        Text(sim.title, color = Accent, fontWeight = FontWeight.Bold)
+                        if (data.simPermissionMessage.isNotBlank()) {
+                            Info(tr("SIM permission", "SIM అనుమతి"), data.simPermissionMessage)
+                        }
+                        data.sims.forEach { sim ->
+                            Card(colors = CardDefaults.cardColors(containerColor = panel), shape = RoundedCornerShape(14.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text(sim.title, color = Accent, fontWeight = FontWeight.Bold)
+                                    if (sim.hasSim) {
                                         Info(tr("SIM status", "SIM స్థితి"), sim.simState)
                                         Info(tr("Operator name", "ఆపరేటర్ పేరు"), sim.operatorName)
                                         Info(tr("Network name", "నెట్‌వర్క్ పేరు"), sim.networkName)
                                         Info(tr("Registration", "నెట్‌వర్క్ రిజిస్ట్రేషన్"), sim.registration)
                                         Info(tr("Network type", "నెట్‌వర్క్ రకం"), sim.networkType)
                                         Info(tr("Roaming", "రోమింగ్"), sim.roaming)
+                                    } else {
+                                        Text(tr("No SIM Inserted", "SIM పెట్టలేదు"), color = fg, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
@@ -410,7 +414,7 @@ fun DiagnosticHome() {
                         Info(tr("Wi-Fi Band", "Wi-Fi బ్యాండ్"), data.wifiBand)
                         Info(tr("Wi-Fi Standard", "Wi-Fi స్టాండర్డ్"), data.wifiStandard)
                         Info(tr("Wi-Fi Channel", "Wi-Fi ఛానల్"), data.wifiChannel)
-                        Info(tr("SIM count", "SIM సంఖ్య"), data.sims.size.toString())
+                        Info(tr("SIM count", "SIM సంఖ్య"), data.sims.count { it.hasSim }.toString())
                         Info(tr("Sensors detected", "సెన్సార్లు"), data.sensorCount)
                         Info(tr("Available RAM", "ఖాళీ RAM"), data.ramFree)
                         Info(tr("Free storage", "ఖాళీ స్టోరేజ్"), data.storageFree)
@@ -563,37 +567,50 @@ fun collectDiagnostics(context: Context): Diagnostics {
         try {
             val smgr = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
             val active = smgr.activeSubscriptionInfoList.orEmpty()
-            val details = active.mapIndexed { index, info ->
-                val tmBase = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-                val tm = tmBase.createForSubscriptionId(info.subscriptionId)
-                val simState = when (tm.simState) {
-                    TelephonyManager.SIM_STATE_READY -> "Ready"
-                    TelephonyManager.SIM_STATE_ABSENT -> "Absent"
-                    TelephonyManager.SIM_STATE_PIN_REQUIRED -> "PIN required"
-                    TelephonyManager.SIM_STATE_PUK_REQUIRED -> "PUK required"
-                    TelephonyManager.SIM_STATE_NETWORK_LOCKED -> "Network locked"
-                    else -> "Unknown"
+            val tmBase = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            val slots = (0..1).map { slotIndex ->
+                val info = active.firstOrNull { it.simSlotIndex == slotIndex }
+                val slotState = try { tmBase.getSimState(slotIndex) } catch (_: Exception) { TelephonyManager.SIM_STATE_UNKNOWN }
+                val present = info != null || slotState == TelephonyManager.SIM_STATE_READY ||
+                    slotState == TelephonyManager.SIM_STATE_PIN_REQUIRED ||
+                    slotState == TelephonyManager.SIM_STATE_PUK_REQUIRED ||
+                    slotState == TelephonyManager.SIM_STATE_NETWORK_LOCKED
+                if (!present) {
+                    SimDetails("SIM SLOT ${slotIndex + 1}", false, "No SIM Inserted", "—", "—", "—", "—", "—")
+                } else if (info == null) {
+                    SimDetails("SIM SLOT ${slotIndex + 1}", true, "SIM detected", "Unavailable", "Unavailable", "Unknown / unavailable", "Unavailable", "Unavailable")
+                } else {
+                    val tm = tmBase.createForSubscriptionId(info.subscriptionId)
+                    val simState = when (slotState) {
+                        TelephonyManager.SIM_STATE_READY -> "Ready"
+                        TelephonyManager.SIM_STATE_ABSENT -> "Absent"
+                        TelephonyManager.SIM_STATE_PIN_REQUIRED -> "PIN required"
+                        TelephonyManager.SIM_STATE_PUK_REQUIRED -> "PUK required"
+                        TelephonyManager.SIM_STATE_NETWORK_LOCKED -> "Network locked"
+                        else -> "Detected"
+                    }
+                    val serviceState = try { tm.serviceState?.state } catch (_: Exception) { null }
+                    val registration = when (serviceState) {
+                        android.telephony.ServiceState.STATE_IN_SERVICE -> "Registered"
+                        android.telephony.ServiceState.STATE_OUT_OF_SERVICE -> "Not registered (out of service)"
+                        android.telephony.ServiceState.STATE_EMERGENCY_ONLY -> "Emergency only"
+                        android.telephony.ServiceState.STATE_POWER_OFF -> "Radio off"
+                        else -> "Unknown / unavailable"
+                    }
+                    val type = try { networkTypeName(tm.dataNetworkType) } catch (_: Exception) { "Unavailable" }
+                    SimDetails(
+                        title = "SIM SLOT ${slotIndex + 1} • ${info.carrierName?.toString()?.takeIf { it.isNotBlank() } ?: "SIM"}",
+                        hasSim = true,
+                        simState = simState,
+                        operatorName = info.carrierName?.toString()?.takeIf { it.isNotBlank() } ?: tm.simOperatorName?.takeIf { it.isNotBlank() } ?: "Unavailable",
+                        networkName = tm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "Unavailable",
+                        registration = registration,
+                        networkType = type,
+                        roaming = if (tm.isNetworkRoaming) "Yes" else "No"
+                    )
                 }
-                val serviceState = try { tm.serviceState?.state } catch (_: Exception) { null }
-                val registration = when (serviceState) {
-                    android.telephony.ServiceState.STATE_IN_SERVICE -> "Registered"
-                    android.telephony.ServiceState.STATE_OUT_OF_SERVICE -> "Not registered (out of service)"
-                    android.telephony.ServiceState.STATE_EMERGENCY_ONLY -> "Emergency only"
-                    android.telephony.ServiceState.STATE_POWER_OFF -> "Radio off"
-                    else -> "Unknown / unavailable"
-                }
-                val type = try { networkTypeName(tm.dataNetworkType) } catch (_: Exception) { "Unavailable" }
-                SimDetails(
-                    title = "SIM ${index + 1}${info.displayName?.toString()?.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}",
-                    simState = simState,
-                    operatorName = info.carrierName?.toString()?.takeIf { it.isNotBlank() } ?: tm.simOperatorName?.takeIf { it.isNotBlank() } ?: "Unavailable",
-                    networkName = tm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "Unavailable",
-                    registration = registration,
-                    networkType = type,
-                    roaming = if (tm.isNetworkRoaming) "Yes" else "No"
-                )
             }
-            details to if (details.isEmpty()) "No active SIM detected" else ""
+            slots to ""
         } catch (_: SecurityException) {
             emptyList<SimDetails>() to "SIM details permission unavailable"
         } catch (_: Exception) {
@@ -632,7 +649,7 @@ fun collectDiagnostics(context: Context): Diagnostics {
             1 -> "Legacy"
             4 -> "Wi-Fi 4 (802.11n)"
             5 -> "Wi-Fi 5 (802.11ac)"
-            6 -> if (frequency in 5925..7125) "Wi-Fi 6E (802.11ax)" else "Wi-Fi 6 (802.11ax)"
+            6 -> if (frequency in 5925..7125) "Wi-Fi 6E (802.11ax)" els "Wi-Fi 6 (802.11ax)"
             7 -> "WiGig (802.11ad)"
             8 -> if (Build.VERSION.SDK_INT >= 33) "Wi-Fi 7 (802.11be)" else "802.11be (Wi-Fi 7)"
             else -> "Unknown"
@@ -747,3 +764,5 @@ private fun safeStart(context: Context, intent: Intent) {
         Toast.makeText(context, "This setting or app is unavailable", Toast.LENGTH_SHORT).show()
     }
 }
+
+            
