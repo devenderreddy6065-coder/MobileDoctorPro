@@ -883,3 +883,239 @@ private fun safeStart(context: Context, intent: Intent) {
         Toast.makeText(context, "This setting or app is unavailable", Toast.LENGTH_SHORT).show()
     }
 }
+
+@Composable
+private fun Note(text: String) {
+    Text(text, color = Color(0xFFB58A32), fontSize = 12.sp)
+}
+
+private fun safeStart(context: Context, intent: Intent) {
+    try {
+        context.startActivity(intent)
+    } catch (_: Exception) {
+        Toast.makeText(context, "This setting or app is unavailable", Toast.LENGTH_SHORT).show()
+    }
+}
+
+
+/*
+ * V1.5.7 ADD-ON MODULE
+ * Live sensor response + practical manual component tests.
+ * Existing V1.5.6 diagnostic collection remains unchanged.
+ */
+
+@Composable
+private fun ComponentTestsPage(
+    onDisplayTest: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    val context = LocalContext.current
+    val sensorManager = remember {
+        context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    }
+    val sensors = remember {
+        try { sensorManager.getSensorList(Sensor.TYPE_ALL) } catch (_: Exception) { emptyList() }
+    }
+    var selectedSensor by remember { mutableStateOf<Sensor?>(null) }
+    var liveValues by remember { mutableStateOf("Select a sensor and start its live test") }
+    var sensorRunning by remember { mutableStateOf(false) }
+    var lastSensorTimestamp by remember { mutableStateOf("Not started") }
+
+    DisposableEffect(selectedSensor, sensorRunning) {
+        val sensor = selectedSensor
+        if (sensor != null && sensorRunning) {
+            val listener = object : android.hardware.SensorEventListener {
+                override fun onSensorChanged(event: android.hardware.SensorEvent) {
+                    liveValues = event.values.mapIndexed { index, value ->
+                        "Axis ${index + 1}: ${DecimalFormat("0.000").format(value)}"
+                    }.joinToString("   •   ")
+                    lastSensorTimestamp = "Live response received"
+                }
+
+                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+                    // Accuracy is device/vendor dependent; the live values remain the main test.
+                }
+            }
+            val registered = try {
+                sensorManager.registerListener(
+                    listener,
+                    sensor,
+                    SensorManager.SENSOR_DELAY_NORMAL
+                )
+            } catch (_: Exception) { false }
+
+            if (!registered) {
+                liveValues = "Sensor listener could not start"
+                lastSensorTimestamp = "Unavailable"
+            }
+
+            onDispose {
+                try { sensorManager.unregisterListener(listener) } catch (_: Exception) {}
+            }
+        } else {
+            onDispose { }
+        }
+    }
+
+    val vibrator = remember {
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+    val audioManager = remember {
+        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+
+    PageTitle("Live & Manual Component Tests", MaterialTheme.colorScheme.onBackground)
+    Note("These tests check observable responses. A successful response does not certify that a component has no physical damage.")
+
+    Text("1. SENSOR LIVE RESPONSE", color = Accent, fontWeight = FontWeight.Bold)
+    Info("Detected sensors", sensors.size.toString())
+
+    sensors.forEach { sensor ->
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    sensorRunning = false
+                    selectedSensor = sensor
+                    liveValues = "Ready to test ${sensor.name}"
+                    lastSensorTimestamp = "Not started"
+                },
+            colors = CardDefaults.cardColors(
+                containerColor = if (selectedSensor?.name == sensor.name)
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                else MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                Text(sensor.name, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    "Vendor: ${sensor.vendor} • Type: ${sensor.type} • Range: ${sensor.maximumRange}",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                    fontSize = 12.sp
+                )
+                Text(
+                    if (selectedSensor?.name == sensor.name) "Selected for live test" else "Tap to select",
+                    color = Accent,
+                    fontSize = 11.sp
+                )
+            }
+        }
+    }
+
+    Info("Selected sensor", selectedSensor?.name ?: "None")
+    Info("Live sensor values", liveValues)
+    Info("Sensor response", lastSensorTimestamp)
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            onClick = {
+                if (selectedSensor == null) {
+                    Toast.makeText(context, "Select a sensor first", Toast.LENGTH_SHORT).show()
+                } else {
+                    sensorRunning = true
+                    liveValues = "Waiting for sensor response…"
+                    lastSensorTimestamp = "Listening"
+                }
+            },
+            modifier = Modifier.weight(1f)
+        ) { Text("Start test") }
+
+        OutlinedButton(
+            onClick = {
+                sensorRunning = false
+                liveValues = "Test stopped"
+                lastSensorTimestamp = "Stopped"
+            },
+            modifier = Modifier.weight(1f)
+        ) { Text("Stop test") }
+    }
+
+    HorizontalDivider()
+    Text("2. DISPLAY & TOUCH", color = Accent, fontWeight = FontWeight.Bold)
+    Note("Check white, black, red, green and blue screens visually. Touch every area of the screen.")
+    ActionButton("Start full-screen colour / touch test", onDisplayTest)
+
+    HorizontalDivider()
+    Text("3. SPEAKER / AUDIO OUTPUT", color = Accent, fontWeight = FontWeight.Bold)
+    Note("Keep volume low before starting. Listen for crackling, distortion or missing audio.")
+    ActionButton("Play speaker test tone") {
+        try {
+            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 85)
+            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 900)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                { try { tone.release() } catch (_: Exception) {} },
+                1200
+            )
+            Toast.makeText(context, "Test tone played — check sound quality", Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {
+            Toast.makeText(context, "Audio test unavailable", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Info(
+        "Audio output devices",
+        try {
+            audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                .joinToString { it.productName?.toString() ?: "Audio device" }
+                .ifBlank { "No output device listed" }
+        } catch (_: Exception) { "Unavailable" }
+    )
+
+    HorizontalDivider()
+    Text("4. MICROPHONE", color = Accent, fontWeight = FontWeight.Bold)
+    Note("Android may require microphone permission for recording. Use a trusted recorder app and play back the recording to check microphone operation.")
+    ActionButton("Open sound settings") {
+        safeStart(context, Intent(Settings.ACTION_SOUND_SETTINGS))
+    }
+    ActionButton("Open voice recorder (if available)") {
+        safeStart(context, Intent("android.provider.MediaStore.RECORD_SOUND"))
+    }
+
+    HorizontalDivider()
+    Text("5. CAMERA & FLASH", color = Accent, fontWeight = FontWeight.Bold)
+    Note("Open the camera and test each available lens manually. Check focus, image clarity and flash operation.")
+    ActionButton("Open camera") {
+        safeStart(context, Intent("android.media.action.IMAGE_CAPTURE"))
+    }
+
+    HorizontalDivider()
+    Text("6. VIBRATION MOTOR", color = Accent, fontWeight = FontWeight.Bold)
+    Info("Vibrator hardware", if (vibrator.hasVibrator()) "Detected" else "Not detected")
+    ActionButton("Run vibration test") {
+        try {
+            if (vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(
+                        VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE)
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(500)
+                }
+                Toast.makeText(context, "Did you feel the vibration?", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(context, "No vibrator reported by Android", Toast.LENGTH_SHORT).show()
+            }
+        } catch (_: Exception) {
+            Toast.makeText(context, "Vibration test unavailable", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    HorizontalDivider()
+    Text("7. CONNECTIVITY & LOCATION", color = Accent, fontWeight = FontWeight.Bold)
+    ActionButton("Open Wi-Fi settings") {
+        safeStart(context, Intent(Settings.ACTION_WIFI_SETTINGS))
+    }
+    ActionButton("Open Bluetooth settings") {
+        safeStart(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+    }
+    ActionButton("Open location settings / GPS") {
+        safeStart(context, Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+    }
+    ActionButton("Refresh diagnostics") {
+        onRefresh()
+        Toast.makeText(context, "Diagnostics refresh requested", Toast.LENGTH_SHORT).show()
+    }
+
+    Note("Status guidance: Working response = the tested function responded; Needs manual check = visual/listening confirmation required; Not detected = Android did not report the component. These results cannot detect every internal circuit or motherboard fault.")
+}
