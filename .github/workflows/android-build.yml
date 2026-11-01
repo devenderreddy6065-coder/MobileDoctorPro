@@ -53,7 +53,8 @@ jobs:
               "android.permission.INTERNET",
               "android.permission.READ_PHONE_STATE",
               "android.permission.ACCESS_FINE_LOCATION"
-          ]
+              "android.permission.VIBRATE" 
+              ]
 
           for permission in permissions:
               tag = f'<uses-permission android:name="{permission}" />'
