@@ -1065,47 +1065,48 @@ private fun ComponentTestsPage(
     ActionButton("Open camera") {
         safeStart(context, Intent("android.media.action.IMAGE_CAPTURE"))
     }
-
     HorizontalDivider()
     Text("6. VIBRATION MOTOR", color = Accent, fontWeight = FontWeight.Bold)
-    Info("Vibrator hardware", if (vibrator.hasVibrator()) "Detected" else "Not detected")
+
+    Info(
+        "Vibrator hardware",
+        if (vibrator.hasVibrator()) "Detected" else "Not detected"
+    )
+
     ActionButton("Run vibration test") {
         try {
             if (vibrator.hasVibrator()) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     vibrator.vibrate(
-                        VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE)
+                        VibrationEffect.createOneShot(
+                            500,
+                            VibrationEffect.DEFAULT_AMPLITUDE
+                        )
                     )
                 } else {
                     @Suppress("DEPRECATION")
                     vibrator.vibrate(500)
                 }
-                Toast.makeText(context, "Did you feel the vibration?", Toast.LENGTH_LONG).show()
+
+                Toast.makeText(
+                    context,
+                    "Did you feel the vibration?",
+                    Toast.LENGTH_LONG
+                ).show()
             } else {
-                Toast.makeText(context, "No vibrator reported by Android", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    "No vibrator reported by Android",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         } catch (e: Exception) {
-    Toast.makeText(
-        context,
-        "Vibration Error: ${e.javaClass.simpleName} - ${e.message}",
-        Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                "Vibration Error: ${e.javaClass.simpleName} - ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
         }
+    }
 
     HorizontalDivider()
-    Text("7. CONNECTIVITY & LOCATION", color = Accent, fontWeight = FontWeight.Bold)
-    ActionButton("Open Wi-Fi settings") {
-        safeStart(context, Intent(Settings.ACTION_WIFI_SETTINGS))
-    }
-    ActionButton("Open Bluetooth settings") {
-        safeStart(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-    }
-    ActionButton("Open location settings / GPS") {
-        safeStart(context, Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-    }
-    ActionButton("Refresh diagnostics") {
-        onRefresh()
-        Toast.makeText(context, "Diagnostics refresh requested", Toast.LENGTH_SHORT).show()
-    }
-
-    Note("Status guidance: Working response = the tested function responded; Needs manual check = visual/listening confirmation required; Not detected = Android did not report the component. These results cannot detect every internal circuit or motherboard fault.")
-}
