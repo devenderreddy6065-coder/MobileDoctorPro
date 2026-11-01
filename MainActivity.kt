@@ -373,54 +373,117 @@ fun DiagnosticHome() {
                     }
 
                     "hardware" -> {
-                        PageTitle(tr("Hardware Health Diagnostics", "హార్డ్‌వేర్ ఆరోగ్య పరీక్ష"), fg)
-                        Note(tr("Automatic checks detect available hardware and Android-reported status. They cannot prove every component is physically healthy.", "ఆటోమేటిక్ పరీక్షలు హార్డ్‌వేర్ అందుబాటును, Android తెలిపే స్థితిని చూపిస్తాయి. ప్రతి భాగం పూర్తిగా బాగుందని ఇవి నిర్ధారించలేవు."))
+                        PageTitle(tr("Complete Hardware Inventory", "పూర్తి హార్డ్‌వేర్ వివరాలు"), fg)
+                        Note(tr("This page lists hardware Android can identify. Detected means available to the system, not a guarantee that the part is physically fault-free.", "Android గుర్తించగల హార్డ్‌వేర్ వివరాలు ఇక్కడ చూపిస్తాం. Detected అంటే సిస్టమ్‌కు కనిపిస్తోంది మాత్రమే; పూర్తిగా పాడుకాలేదని హామీ కాదు."))
+
                         val pm = context.packageManager
                         val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
                         val cameraIds = try { cameraManager.cameraIdList.toList() } catch (_: Exception) { emptyList() }
-                        val flashCount = try { cameraIds.count { cameraManager.getCameraCharacteristics(it).get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true } } catch (_: Exception) { 0 }
+                        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+                        val allSensors = try { sensorManager.getSensorList(Sensor.TYPE_ALL) } catch (_: Exception) { emptyList() }
                         val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
                         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                        val outputCount = try { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).size } catch (_: Exception) { 0 }
+                        val audioOutputs = try { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList() } catch (_: Exception) { emptyList() }
+                        val audioInputs = try { audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList() } catch (_: Exception) { emptyList() }
+                        val displayMetrics = context.resources.displayMetrics
+                        val displayWidth = displayMetrics.widthPixels
+                        val displayHeight = displayMetrics.heightPixels
+                        val density = DecimalFormat("0.0").format(displayMetrics.density)
+                        val batteryIntentNow = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                        val batteryTechNow = batteryIntentNow?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY) ?: "Unavailable"
+                        val batteryVoltageNow = batteryIntentNow?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
+                        val batteryTempNow = batteryIntentNow?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1) ?: -1
+                        val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+                        val bluetoothAvailable = try { btManager?.adapter != null } catch (_: Exception) { false }
+                        val nfcAvailable = try { android.nfc.NfcAdapter.getDefaultAdapter(context) != null } catch (_: Exception) { false }
+                        val cameraDetails = cameraIds.map { id ->
+                            try {
+                                val chars = cameraManager.getCameraCharacteristics(id)
+                                val facing = when (chars.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)) {
+                                    android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT -> "Front"
+                                    android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK -> "Back"
+                                    android.hardware.camera2.CameraCharacteristics.LENS_FACING_EXTERNAL -> "External"
+                                    else -> "Unknown facing"
+                                }
+                                val sizes = chars.get(android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                                    ?.getOutputSizes(android.graphics.ImageFormat.JPEG)
+                                val maxSize = sizes?.maxByOrNull { it.width.toLong() * it.height.toLong() }
+                                val resolution = maxSize?.let { "${it.width} × ${it.height}" } ?: "Resolution unavailable"
+                                val hasFlash = chars.get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+                                "Camera ID $id • $facing • $resolution • Flash: ${if (hasFlash) "Yes" else "No"}"
+                            } catch (_: Exception) { "Camera ID $id • Details unavailable" }
+                        }
 
-                        Text(tr("AUTOMATIC DETECTION", "ఆటోమేటిక్ గుర్తింపు"), color = Accent, fontWeight = FontWeight.Bold)
-                        Info(tr("Processor cores", "ప్రాసెసర్ కోర్లు"), Runtime.getRuntime().availableProcessors().toString())
-                        Info(tr("Camera modules detected", "గుర్తించిన కెమెరాలు"), if (cameraIds.isNotEmpty()) cameraIds.size.toString() else "Not detected / access unavailable")
-                        Info(tr("Flash units detected", "గుర్తించిన ఫ్లాష్‌లు"), flashCount.toString())
-                        Info(tr("Microphone feature", "మైక్రోఫోన్"), data.microphone)
-                        Info(tr("Audio output devices", "ఆడియో అవుట్‌పుట్ పరికరాలు"), outputCount.toString())
-                        Info(tr("Vibration motor", "వైబ్రేషన్ మోటార్"), if (vibrator.hasVibrator()) "Detected • manual test required" else "Not detected")
-                        Info(tr("Battery health (Android report)", "బ్యాటరీ ఆరోగ్యం"), data.batteryHealth)
-                        Info(tr("Sensors detected", "గుర్తించిన సెన్సార్లు"), data.sensorCount)
+                        Text(tr("DEVICE & PROCESSING", "ఫోన్ & ప్రాసెసింగ్"), color = Accent, fontWeight = FontWeight.Bold)
+                        Info("Manufacturer / Model", "${Build.MANUFACTURER} ${Build.MODEL}")
+                        Info("Device / Product", "${Build.DEVICE} / ${Build.PRODUCT}")
+                        Info("CPU architecture", Build.SUPPORTED_ABIS.joinToString(", "))
+                        Info("Available CPU cores", Runtime.getRuntime().availableProcessors().toString())
+                        Info("GPU", tr("Android does not expose GPU model through this basic check", "ఈ ప్రాథమిక పరీక్షలో GPU మోడల్ Android ఇవ్వడం లేదు"))
+                        Info("RAM", "${data.ramTotal} total • ${data.ramFree} available")
+                        Info("Internal storage", "${data.storageTotal} total • ${data.storageFree} free")
+
                         HorizontalDivider()
-                        Text(tr("MANUAL FUNCTION TESTS", "మాన్యువల్ పనితీరు పరీక్షలు"), color = Accent, fontWeight = FontWeight.Bold)
+                        Text(tr("DISPLAY HARDWARE", "డిస్‌ప్లే హార్డ్‌వేర్"), color = Accent, fontWeight = FontWeight.Bold)
+                        Info("Display resolution", "${displayWidth} × ${displayHeight} pixels (app display metrics)")
+                        Info("Display density", "$density× • ${displayMetrics.densityDpi} dpi")
+                        Info("Refresh rate", try { "${context.display?.refreshRate ?: "Unavailable"} Hz" } catch (_: Exception) { "Unavailable" })
+                        Info("Touchscreen", if (pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)) "Detected • manual touch test recommended" else "Not reported")
+
+                        HorizontalDivider()
+                        Text(tr("CAMERA & FLASH COMPONENTS", "కెమెరా & ఫ్లాష్ భాగాలు"), color = Accent, fontWeight = FontWeight.Bold)
+                        Info("Camera modules", if (cameraIds.isNotEmpty()) "${cameraIds.size} detected" else "Not detected / access unavailable")
+                        if (cameraDetails.isNotEmpty()) cameraDetails.forEachIndexed { index, detail -> Info("Camera ${index + 1}", detail) }
+                        Info("Camera flash", if (cameraDetails.any { it.contains("Flash: Yes") }) "Flash hardware reported" else "No flash reported")
+                        ActionButton(tr("Open camera app for manual test", "కెమెరా మాన్యువల్ పరీక్ష")) { safeStart(context, Intent("android.media.action.IMAGE_CAPTURE")) }
+
+                        HorizontalDivider()
+                        Text(tr("SENSORS", "సెన్సార్లు"), color = Accent, fontWeight = FontWeight.Bold)
+                        Info("Sensor count", allSensors.size.toString())
+                        allSensors.forEachIndexed { index, sensor ->
+                            Info("${index + 1}. ${sensor.name}", "Vendor: ${sensor.vendor} • Version: ${sensor.version} • Range: ${sensor.maximumRange} • Power: ${sensor.power} mA")
+                        }
+
+                        HorizontalDivider()
+                        Text(tr("AUDIO & HAPTICS", "ఆడియో & వైబ్రేషన్"), color = Accent, fontWeight = FontWeight.Bold)
+                        Info("Microphone feature", if (pm.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)) "Detected • recording test needed" else "Not reported")
+                        Info("Audio input devices", if (audioInputs.isEmpty()) "No input device listed" else audioInputs.joinToString { it.productName.toString() })
+                        Info("Audio output devices", if (audioOutputs.isEmpty()) "No output device listed" else audioOutputs.joinToString { it.productName.toString() })
+                        Info("Vibration motor", if (vibrator.hasVibrator()) "Detected • manual test needed" else "Not detected")
                         ActionButton(tr("Test vibration motor", "వైబ్రేషన్ మోటార్ పరీక్ష")) {
                             try {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    vibrator.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE))
-                                } else {
-                                    vibrator.vibrate(400)
-                                }
-                                Toast.makeText(context, tr("Vibration test triggered. Confirm whether you felt vibration.", "వైబ్రేషన్ పరీక్ష ప్రారంభమైంది. ఫోన్ వైబ్రేట్ అయిందో చూడండి."), Toast.LENGTH_LONG).show()
-                            } catch (_: Exception) {
-                                Toast.makeText(context, tr("Vibration test unavailable", "వైబ్రేషన్ పరీక్ష అందుబాటులో లేదు"), Toast.LENGTH_SHORT).show()
-                            }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE)) else vibrator.vibrate(400)
+                                Toast.makeText(context, tr("Did you feel vibration?", "వైబ్రేషన్ అనిపించిందా?"), Toast.LENGTH_LONG).show()
+                            } catch (_: Exception) { Toast.makeText(context, "Vibration test unavailable", Toast.LENGTH_SHORT).show() }
                         }
                         ActionButton(tr("Play speaker test tone", "స్పీకర్ పరీక్ష శబ్దం")) {
                             try {
                                 val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 60)
                                 tone.startTone(ToneGenerator.TONE_PROP_BEEP, 700)
                                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 1000)
-                            } catch (_: Exception) {
-                                Toast.makeText(context, tr("Speaker test unavailable", "స్పీకర్ పరీక్ష అందుబాటులో లేదు"), Toast.LENGTH_SHORT).show()
-                            }
+                            } catch (_: Exception) { Toast.makeText(context, "Audio test unavailable", Toast.LENGTH_SHORT).show() }
                         }
-                        ActionButton(tr("Open camera for manual test", "కెమెరా మాన్యువల్ పరీక్ష")) {
-                            safeStart(context, Intent("android.media.action.IMAGE_CAPTURE"))
-                        }
-                        ActionButton(tr("Open display colour test", "డిస్‌ప్లే రంగుల పరీక్ష")) { page = "display" }
-                        ActionButton(tr("Open sensor list", "సెన్సార్ల జాబితా")) { page = "sensors" }
-                        Note(tr("For display dead pixels, microphone recording quality, camera focus, charging-port damage and motherboard faults, visual/manual or service-equipment testing is required.", "Dead Pixels, మైక్రోఫోన్ రికార్డింగ్ నాణ్యత, కెమెరా ఫోకస్, ఛార్జింగ్ పోర్ట్, మదర్‌బోర్డ్ లోపాలకు మాన్యువల్ లేదా సర్వీస్ పరికరాల పరీక్ష అవసరం."))
+
+                        HorizontalDivider()
+                        Text(tr("BATTERY & POWER", "బ్యాటరీ & పవర్"), color = Accent, fontWeight = FontWeight.Bold)
+                        Info("Battery technology", batteryTechNow)
+                        Info("Battery voltage", if (batteryVoltageNow > 0) "$batteryVoltageNow mV" else "Unavailable")
+                        Info("Battery temperature", if (batteryTempNow >= 0) "${DecimalFormat("0.0").format(batteryTempNow / 10.0)} °C" else "Unavailable")
+                        Info("Battery health (Android)", data.batteryHealth)
+
+                        HorizontalDivider()
+                        Text(tr("CONNECTIVITY & OTHER HARDWARE", "కనెక్టివిటీ & ఇతర హార్డ్‌వేర్"), color = Accent, fontWeight = FontWeight.Bold)
+                        Info("Wi-Fi", if (pm.hasSystemFeature(PackageManager.FEATURE_WIFI)) "Supported" else "Not reported")
+                        Info("Bluetooth", if (bluetoothAvailable) "Bluetooth adapter detected" else "Not detected / unavailable")
+                        Info("NFC", if (nfcAvailable) "NFC adapter detected" else "Not detected")
+                        Info("GPS / Location", if (pm.hasSystemFeature(PackageManager.FEATURE_LOCATION_GPS)) "GPS feature reported" else "GPS feature not reported")
+                        Info("Mobile radio", if (pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) "Telephony hardware reported" else "Not reported")
+                        Info("USB host", if (pm.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) "Supported" else "Not reported")
+                        Info("Fingerprint sensor", if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && pm.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) "Feature reported • unlock test needed" else "Not reported")
+                        Info("Flashlight", if (pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH)) "Feature reported" else "Not reported")
+
+                        HorizontalDivider()
+                        Note(tr("Detected = Android can see or report the component. A real damage diagnosis may require manual tests, permissions, manufacturer diagnostics or service equipment. Some internal chips and motherboard circuits are not exposed to ordinary Android apps.", "Detected అంటే Android ఆ భాగాన్ని గుర్తించింది. నిజమైన damage నిర్ధారణకు manual tests లేదా service equipment అవసరం కావచ్చు. కొన్ని internal chips, motherboard circuits సాధారణ Android apps‌కు కనిపించవు."))
                     }
 
                     "performance" -> {
@@ -479,7 +542,7 @@ fun DiagnosticHome() {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("Mobile Doctor Pro • Version 1.5.5", color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally), fontSize = 11.sp)
+                Text("Mobile Doctor Pro • Version 1.5.6", color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally), fontSize = 11.sp)
             }
         }
     }
@@ -490,11 +553,7 @@ data class Diagnostics(
     val battery: String, val batteryPercent: Int, val temperature: String, val charging: String,
     val batteryHealth: String, val batteryVoltage: String, val batteryCurrent: String,
     val batteryAverageCurrent: String, val batteryCharge: String, val chargingSource: String,
-    val batteryTechnology: String, val chargingType: String, val electricalInput: String,
-    val batteryPower: String, val chargerOutputVoltage: String, val chargerOutputCurrent: String,
-    val chargerOutputPower: String, val chargingProtocol: String,
-    val ramTotal: String, val ramFree: String, val storageTotal: String, val storageFree: String,
-    val abi: String, val abis: String, val securityPatch: String, val kernel: String,
+    val batteryTechnology: String, val chargingType: String, val electricalInput: String, val securityPatch: String, val kernel: String,
     val device: String, val product: String, val network: String, val transport: String,
     val internet: String, val mobileNetworkType: String, val mobileConnected: String,
     val sims: List<SimDetails>, val simPermissionMessage: String,
