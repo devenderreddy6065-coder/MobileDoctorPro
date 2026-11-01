@@ -1074,41 +1074,40 @@ private fun ComponentTestsPage(
     )
 
     ActionButton("Run vibration test") {
-        try {
-            if (vibrator.hasVibrator()) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(
-                        VibrationEffect.createOneShot(
-                            500,
-                            VibrationEffect.DEFAULT_AMPLITUDE
-                        )
+    try {
+        if (vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(
+                    VibrationEffect.createOneShot(
+                        500,
+                        VibrationEffect.DEFAULT_AMPLITUDE
                     )
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(500)
-                }
-
-                Toast.makeText(
-                    context,
-                    "Did you feel the vibration?",
-                    Toast.LENGTH_LONG
-                ).show()
+                )
             } else {
-                Toast.makeText(
-                    context,
-                    "No vibrator reported by Android",
-                    Toast.LENGTH_SHORT
-                ).show()
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(500)
             }
-        } catch (e: Exception) {
+
             Toast.makeText(
                 context,
-                "Vibration Error: ${e.javaClass.simpleName} - ${e.message}",
+                "Did you feel the vibration?",
                 Toast.LENGTH_LONG
             ).show()
+        } else {
+            Toast.makeText(
+                context,
+                "No vibrator reported by Android",
+                Toast.LENGTH_SHORT
+            ).show()
         }
+    } catch (e: Exception) {
+        Toast.makeText(
+            context,
+            "Vibration Error: ${e.javaClass.simpleName} - ${e.message}",
+            Toast.LENGTH_LONG
+        ).show()
     }
-
+}
     
     HorizontalDivider()
     Text("7. CONNECTIVITY & LOCATION", color = Accent, fontWeight = FontWeight.Bold)
