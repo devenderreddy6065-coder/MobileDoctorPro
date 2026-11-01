@@ -884,18 +884,6 @@ private fun safeStart(context: Context, intent: Intent) {
     }
 }
 
-@Composable
-private fun Note(text: String) {
-    Text(text, color = Color(0xFFB58A32), fontSize = 12.sp)
-}
-
-private fun safeStart(context: Context, intent: Intent) {
-    try {
-        context.startActivity(intent)
-    } catch (_: Exception) {
-        Toast.makeText(context, "This setting or app is unavailable", Toast.LENGTH_SHORT).show()
-    }
-}
 
 
 /*
