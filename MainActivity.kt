@@ -207,7 +207,8 @@ fun DiagnosticHome() {
                             Triple("network", tr("Network", "నెట్‌వర్క్"), "⌁"),
                             Triple("performance", tr("CPU, RAM & Storage", "CPU, RAM & స్టోరేజ్"), "▤"),
                             Triple("hardware", tr("Hardware Health Check", "హార్డ్‌వేర్ ఆరోగ్య పరీక్ష"), "⚙"),
-                            Triple("componenttests", tr("Component Tests", "కాంపోనెంట్ పరీక్షలు"), "🧪")
+                            Triple("componenttests", tr("Component Tests", "కాంపోనెంట్ పరీక్షలు"), "🧪"),
+                            Triple("batteryadvanced", tr("Advanced Battery & Charger", "అడ్వాన్స్‌డ్ బ్యాటరీ & ఛార్జర్"), "⚡")
                         )
                         items.chunked(2).forEach { pair ->
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -243,7 +244,7 @@ fun DiagnosticHome() {
                         Info(tr("Voltage", "వోల్టేజ్"), data.batteryVoltage)
                         Info(tr("Current", "కరెంట్"), data.batteryCurrent)
                         Info(tr("Average current", "సగటు కరెంట్"), data.batteryAverageCurrent)
-                        Info(tr("Charge counter", "ఛార్జ్ కౌంటర్"), data.batteryCharge)
+                        Info(tr("Current capacity (charge counter)", "ప్రస్తుత బ్యాటరీ సామర్థ్యం (Charge Counter)"), data.batteryCharge)
                         Info(tr("Charging source", "ఛార్జింగ్ సోర్స్"), data.chargingSource)
                         Info(tr("Technology", "టెక్నాలజీ"), data.batteryTechnology)
                         Note(tr("Current is displayed with the original sign reported by Android.", "Android ఇచ్చిన అసలు Current signనే చూపిస్తున్నాం."))
@@ -286,6 +287,10 @@ fun DiagnosticHome() {
                         Info(tr("Battery Technology", "బ్యాటరీ టెక్నాలజీ"), data.batteryTechnology)
                         Note(tr("Battery-side power is calculated from battery voltage and current. It is not charger output power.", "Battery Voltage, Current ఆధారంగా లెక్కించినది Battery-side Power మాత్రమే. ఇది Charger Output Power కాదు."))
                         Note(tr("Android public APIs do not expose actual VOOC/SUPERVOOC protocol or charger output readings on every device.", "ప్రతి ఫోన్‌లో VOOC/SUPERVOOC ప్రోటోకాల్ లేదా Charger Output readings Android API ద్వారా లభించవు."))
+                    }
+
+                    "batteryadvanced" -> {
+                        BatteryChargerAdvancedAddon()
                     }
 
                     "display" -> {
@@ -549,7 +554,7 @@ fun DiagnosticHome() {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("Mobile Doctor Pro • Version 1.5.8", color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally), fontSize = 11.sp)
+                Text("Mobile Doctor Pro • Version 1.6.0", color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally), fontSize = 11.sp)
             }
         }
     }
@@ -1128,4 +1133,194 @@ private fun runVibrationTest(context: Context, vibrator: Vibrator) {
     } catch (e: Exception) {
         Toast.makeText(context, "Vibration error: ${e.javaClass.simpleName}: ${e.message}", Toast.LENGTH_LONG).show()
     }
+}
+
+
+// -----------------------------------------------------------------------------
+// V1.6.0 ADD-ON MODULE: ADVANCED BATTERY & CHARGER DIAGNOSTICS
+// Kept separate from the existing diagnostics implementation.
+// -----------------------------------------------------------------------------
+
+private data class BatteryAddonSample(
+    val timeMs: Long,
+    val level: Int,
+    val status: Int,
+    val voltageMv: Int,
+    val temperatureTenthsC: Int,
+    val currentUa: Long?,
+    val averageCurrentUa: Long?,
+    val chargeCounterUah: Long?,
+    val plugged: Int,
+    val androidHealth: Int
+)
+
+private fun readPowerSupplyNode(names: List<String>): Long? {
+    val roots = listOf("/sys/class/power_supply/battery", "/sys/class/power_supply/BAT0")
+    for (root in roots) for (name in names) {
+        try {
+            val value = java.io.File("$root/$name").readText().trim().toLongOrNull()
+            if (value != null && value != 0L && abs(value.toDouble()) < 100_000_000.0) return value
+        } catch (_: Exception) { }
+    }
+    return null
+}
+
+@Suppress("DEPRECATION")
+private fun readBatteryAddonSample(context: Context): BatteryAddonSample {
+    val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    val manager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+    fun property(id: Int): Long? = try {
+        manager.getLongProperty(id).takeIf { it != Long.MIN_VALUE && abs(it.toDouble()) < 100_000_000.0 }
+    } catch (_: Exception) { null }
+    val voltageFromIntent = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
+    val voltageFromNode = readPowerSupplyNode(listOf("voltage_now", "voltage_avg"))
+    val voltageMv = when {
+        voltageFromIntent in 2500..5000 -> voltageFromIntent
+        voltageFromNode != null && voltageFromNode in 2_500_000L..5_000_000L -> (voltageFromNode / 1000L).toInt()
+        else -> -1
+    }
+    val currentNow = property(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+        ?: readPowerSupplyNode(listOf("current_now"))
+    val currentAverage = property(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE)
+        ?: readPowerSupplyNode(listOf("current_avg"))
+    val chargeCounter = property(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+        ?: readPowerSupplyNode(listOf("charge_counter"))
+    return BatteryAddonSample(
+        timeMs = System.currentTimeMillis(),
+        level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1,
+        status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1,
+        voltageMv = voltageMv,
+        temperatureTenthsC = intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1) ?: -1,
+        currentUa = currentNow,
+        averageCurrentUa = currentAverage,
+        chargeCounterUah = chargeCounter,
+        plugged = intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0,
+        androidHealth = intent?.getIntExtra(BatteryManager.EXTRA_HEALTH, -1) ?: -1
+    )
+}
+
+private fun readDesignCapacityMah(): String {
+    val candidates = listOf(
+        "/sys/class/power_supply/battery/charge_full_design",
+        "/sys/class/power_supply/BAT0/charge_full_design"
+    )
+    for (path in candidates) {
+        try {
+            val raw = java.io.File(path).readText().trim().toLongOrNull() ?: continue
+            if (raw > 0L) {
+                // Linux power_supply charge values are normally in microamp-hours.
+                val mah = if (raw > 100_000L) raw / 1000.0 else raw.toDouble()
+                if (mah in 100.0..30000.0) return "${DecimalFormat("0").format(mah)} mAh (design)"
+            }
+        } catch (_: Exception) { }
+    }
+    return "Unavailable (design value not exposed)"
+}
+
+@Composable
+private fun BatteryChargerAdvancedAddon() {
+    val context = LocalContext.current
+    var sample by remember { mutableStateOf(readBatteryAddonSample(context)) }
+    var history by remember { mutableStateOf(listOf(sample)) }
+    val maxCapacity = remember { readDesignCapacityMah() }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(2000)
+            val next = readBatteryAddonSample(context)
+            sample = next
+            history = (history + next).takeLast(20)
+        }
+    }
+
+    val firstSample = history.firstOrNull()
+    val elapsedMinutes = if (firstSample != null) (sample.timeMs - firstSample.timeMs).coerceAtLeast(1L) / 60000.0 else 0.0
+    val chargeDeltaMah = if (firstSample?.chargeCounterUah != null && sample.chargeCounterUah != null)
+        (sample.chargeCounterUah - firstSample.chargeCounterUah) / 1000.0 else null
+    val rate = if (chargeDeltaMah != null && elapsedMinutes > 0.0) chargeDeltaMah / elapsedMinutes else null
+    val isCharging = sample.status == BatteryManager.BATTERY_STATUS_CHARGING || sample.status == BatteryManager.BATTERY_STATUS_FULL
+    val isDischarging = sample.status == BatteryManager.BATTERY_STATUS_DISCHARGING
+    val chargingRateText = if (isCharging && rate != null && rate >= 0.0) "${DecimalFormat("0.00").format(rate)} mAh/min" else "Collecting / unavailable"
+    val drainRateText = if (isDischarging && rate != null && rate <= 0.0) "${DecimalFormat("0.00").format(abs(rate))} mAh/min" else "Collecting / unavailable"
+
+    val voltageValid = sample.voltageMv in 2500..5000
+    val voltageText = if (voltageValid) "${sample.voltageMv} mV" else "Unavailable"
+    fun currentText(value: Long?): String = if (value == null || abs(value.toDouble()) > 10_000_000.0) "Unavailable"
+        else "${DecimalFormat("+0.0;-0.0").format(value / 1000.0)} mA"
+    val currentText = currentText(sample.currentUa)
+    val averageText = currentText(sample.averageCurrentUa)
+    val powerText = if (voltageValid && sample.currentUa != null) {
+        val watts = sample.voltageMv.toDouble() * abs(sample.currentUa.toDouble()) / 1_000_000_000.0
+        "${DecimalFormat("0.000").format(watts)} W (battery-side)"
+    } else "Unavailable"
+    val currentCapacity = sample.chargeCounterUah?.takeIf { it > 0L }?.let {
+        "${DecimalFormat("0").format(it / 1000.0)} mAh"
+    } ?: "Unavailable"
+    val androidHealth = when (sample.androidHealth) {
+        BatteryManager.BATTERY_HEALTH_GOOD -> "Good (Android-reported status)"
+        BatteryManager.BATTERY_HEALTH_OVERHEAT -> "Overheat (Android-reported status)"
+        BatteryManager.BATTERY_HEALTH_DEAD -> "Dead (Android-reported status)"
+        BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "Over-voltage (Android-reported status)"
+        BatteryManager.BATTERY_HEALTH_COLD -> "Cold (Android-reported status)"
+        else -> "Unknown / unavailable"
+    }
+
+    val voltageSamples = history.map { it.voltageMv }.filter { it in 2500..5000 }
+    val currentSamples = history.mapNotNull { it.currentUa }.filter { abs(it.toDouble()) <= 10_000_000.0 }
+    val stability = if (history.size < 5 || voltageSamples.size < 3 || currentSamples.size < 3) {
+        "Collecting samples (keep this page open)"
+    } else {
+        val voltageRange = voltageSamples.maxOrNull()!! - voltageSamples.minOrNull()!!
+        val currentAbs = currentSamples.map { abs(it) }
+        val currentRangeMa = (currentAbs.maxOrNull()!! - currentAbs.minOrNull()!!) / 1000.0
+        when {
+            voltageRange <= 80 && currentRangeMa <= 500.0 -> "Relatively stable during recent samples"
+            voltageRange > 250 || currentRangeMa > 1500.0 -> "Large variation observed"
+            else -> "Some variation observed"
+        }
+    }
+    val source = when {
+        (sample.plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "Wireless"
+        (sample.plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "AC adapter"
+        (sample.plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "USB"
+        else -> "Not connected / unknown"
+    }
+    val levelText = if (sample.level >= 0) "${sample.level}%" else "Unavailable"
+    val tempText = if (sample.temperatureTenthsC in 0..1000) "${DecimalFormat("0.1").format(sample.temperatureTenthsC / 10.0)} °C" else "Unavailable"
+
+    PageTitle("Advanced Battery & Charger Diagnostics • V1.6.0", MaterialTheme.colorScheme.onBackground)
+    Text("LIVE MONITOR • 2 SECOND SAMPLE", color = Good, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    Text("BATTERY CAPACITY", color = Accent, fontWeight = FontWeight.Bold)
+    Info("MAX CAPACITY", maxCapacity)
+    Info("CURRENT CAPACITY", currentCapacity)
+    Info("Battery level", levelText)
+    HorizontalDivider()
+    Text("BATTERY ELECTRICAL READINGS", color = Accent, fontWeight = FontWeight.Bold)
+    Info("Battery voltage", voltageText)
+    Info("Current now", currentText)
+    Info("Average current", averageText)
+    Info("Battery power", powerText)
+    Info("Charging rate", chargingRateText)
+    Info("Battery drain rate", drainRateText)
+    Info("Battery temperature", tempText)
+    Info("Charging source", source)
+    HorizontalDivider()
+    Text("CHARGING STABILITY", color = Accent, fontWeight = FontWeight.Bold)
+    Info("Recent stability", stability)
+    Info("Samples collected", "${history.size} / 20")
+    HorizontalDivider()
+    Text("CHARGER / SUPERVOOC DETECTION", color = Accent, fontWeight = FontWeight.Bold)
+    Info("SUPERVOOC / VOOC", "Not exposed to standard Android API")
+    Info("Charging protocol", "Unavailable / not reliably detectable")
+    Info("Charger adapter output voltage", "Unavailable")
+    Info("Charger adapter output current", "Unavailable")
+    Info("Charger adapter output power", "Unavailable")
+    Note("Battery-side voltage/current/power are readings at the phone battery. They are NOT the charger adapter's USB output measurements.")
+    Note("SUPERVOOC/VOOC negotiation and true adapter output require OPPO/vendor-specific interfaces or an external USB power meter. This screen does not guess or invent those values.")
+    HorizontalDivider()
+    Text("BATTERY HEALTH INTERPRETATION", color = Accent, fontWeight = FontWeight.Bold)
+    Info("Android battery health status", androidHealth)
+    Info("Actual battery wear / SOH", "Not measured by this Android status")
+    Note("Android's GOOD/OVERHEAT/DEAD status is a coarse system health flag. It is not a measured State of Health percentage or remaining design capacity.")
+    Note("Charge Counter is the current remaining charge reported by the fuel gauge. It is not MAX CAPACITY. MAX CAPACITY is shown only when a readable design-capacity node exists.")
 }
