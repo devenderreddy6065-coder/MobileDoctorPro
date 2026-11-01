@@ -649,7 +649,7 @@ fun collectDiagnostics(context: Context): Diagnostics {
             1 -> "Legacy"
             4 -> "Wi-Fi 4 (802.11n)"
             5 -> "Wi-Fi 5 (802.11ac)"
-            6 -> if (frequency in 5925..7125) "Wi-Fi 6E (802.11ax)" els "Wi-Fi 6 (802.11ax)"
+            6 -> if (frequency in 5925..7125) "Wi-Fi 6E (802.11ax)" else "Wi-Fi 6 (802.11ax)"
             7 -> "WiGig (802.11ad)"
             8 -> if (Build.VERSION.SDK_INT >= 33) "Wi-Fi 7 (802.11be)" else "802.11be (Wi-Fi 7)"
             else -> "Unknown"
