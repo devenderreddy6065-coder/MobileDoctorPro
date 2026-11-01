@@ -454,8 +454,13 @@ fun DiagnosticHome() {
                             try {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE)) else vibrator.vibrate(400)
                                 Toast.makeText(context, tr("Did you feel vibration?", "వైబ్రేషన్ అనిపించిందా?"), Toast.LENGTH_LONG).show()
-                            } catch (_: Exception) { Toast.makeText(context, "Vibration test unavailable", Toast.LENGTH_SHORT).show() }
-                        }
+                            } catch (e: Exception) {
+    Toast.makeText(
+        context,
+        "Vibration Error: ${e.javaClass.simpleName} - ${e.message}",
+        Toast.LENGTH_LONG
+    ).show()
+                            }
                         ActionButton(tr("Play speaker test tone", "స్పీకర్ పరీక్ష శబ్దం")) {
                             try {
                                 val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 60)
