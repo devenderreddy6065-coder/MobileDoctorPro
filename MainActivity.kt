@@ -1084,10 +1084,13 @@ private fun ComponentTestsPage(
             } else {
                 Toast.makeText(context, "No vibrator reported by Android", Toast.LENGTH_SHORT).show()
             }
-        } catch (_: Exception) {
-            Toast.makeText(context, "Vibration test unavailable", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+    Toast.makeText(
+        context,
+        "Vibration Error: ${e.javaClass.simpleName} - ${e.message}",
+        Toast.LENGTH_LONG
+    ).show()
         }
-    }
 
     HorizontalDivider()
     Text("7. CONNECTIVITY & LOCATION", color = Accent, fontWeight = FontWeight.Bold)
