@@ -8,6 +8,9 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
+import android.hardware.camera2.CameraManager
+import android.os.Vibrator
+import android.os.VibrationEffect
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
@@ -202,7 +205,8 @@ fun DiagnosticHome() {
                             Triple("camera", tr("Camera & Flash", "కెమెరా & ఫ్లాష్"), "◉"),
                             Triple("sensors", tr("Sensors", "సెన్సార్లు"), "⌁"),
                             Triple("network", tr("Network", "నెట్‌వర్క్"), "⌁"),
-                            Triple("performance", tr("CPU, RAM & Storage", "CPU, RAM & స్టోరేజ్"), "▤")
+                            Triple("performance", tr("CPU, RAM & Storage", "CPU, RAM & స్టోరేజ్"), "▤"),
+                            Triple("hardware", tr("Hardware Health Check", "హార్డ్‌వేర్ ఆరోగ్య పరీక్ష"), "⚙")
                         )
                         items.chunked(2).forEach { pair ->
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -330,7 +334,7 @@ fun DiagnosticHome() {
                         Info(tr("Active Transport", "యాక్టివ్ నెట్‌వర్క్"), data.transport)
                         Info(tr("Internet validated", "ఇంటర్నెట్ నిర్ధారణ"), data.internet)
                         HorizontalDivider()
-              Text(tr("SIM & Mobile Network", "SIM & మొబైల్ నెట్‌వర్క్"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(tr("SIM & Mobile Network", "SIM & మొబైల్ నెట్‌వర్క్"), color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Info(tr("Mobile Network Type", "మొబైల్ నెట్‌వర్క్ రకం"), data.mobileNetworkType)
                         Info(tr("Mobile Data Active Path", "మొబైల్ డేటా కనెక్షన్"), data.mobileConnected)
                         if (data.simPermissionMessage.isNotBlank()) {
@@ -368,6 +372,57 @@ fun DiagnosticHome() {
                         ActionButton(tr("Open Bluetooth settings", "Bluetooth సెట్టింగ్స్")) { safeStart(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
                     }
 
+                    "hardware" -> {
+                        PageTitle(tr("Hardware Health Diagnostics", "హార్డ్‌వేర్ ఆరోగ్య పరీక్ష"), fg)
+                        Note(tr("Automatic checks detect available hardware and Android-reported status. They cannot prove every component is physically healthy.", "ఆటోమేటిక్ పరీక్షలు హార్డ్‌వేర్ అందుబాటును, Android తెలిపే స్థితిని చూపిస్తాయి. ప్రతి భాగం పూర్తిగా బాగుందని ఇవి నిర్ధారించలేవు."))
+                        val pm = context.packageManager
+                        val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                        val cameraIds = try { cameraManager.cameraIdList.toList() } catch (_: Exception) { emptyList() }
+                        val flashCount = try { cameraIds.count { cameraManager.getCameraCharacteristics(it).get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true } } catch (_: Exception) { 0 }
+                        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                        val outputCount = try { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).size } catch (_: Exception) { 0 }
+
+                        Text(tr("AUTOMATIC DETECTION", "ఆటోమేటిక్ గుర్తింపు"), color = Accent, fontWeight = FontWeight.Bold)
+                        Info(tr("Processor cores", "ప్రాసెసర్ కోర్లు"), Runtime.getRuntime().availableProcessors().toString())
+                        Info(tr("Camera modules detected", "గుర్తించిన కెమెరాలు"), if (cameraIds.isNotEmpty()) cameraIds.size.toString() else "Not detected / access unavailable")
+                        Info(tr("Flash units detected", "గుర్తించిన ఫ్లాష్‌లు"), flashCount.toString())
+                        Info(tr("Microphone feature", "మైక్రోఫోన్"), data.microphone)
+                        Info(tr("Audio output devices", "ఆడియో అవుట్‌పుట్ పరికరాలు"), outputCount.toString())
+                        Info(tr("Vibration motor", "వైబ్రేషన్ మోటార్"), if (vibrator.hasVibrator()) "Detected • manual test required" else "Not detected")
+                        Info(tr("Battery health (Android report)", "బ్యాటరీ ఆరోగ్యం"), data.batteryHealth)
+                        Info(tr("Sensors detected", "గుర్తించిన సెన్సార్లు"), data.sensorCount)
+                        HorizontalDivider()
+                        Text(tr("MANUAL FUNCTION TESTS", "మాన్యువల్ పనితీరు పరీక్షలు"), color = Accent, fontWeight = FontWeight.Bold)
+                        ActionButton(tr("Test vibration motor", "వైబ్రేషన్ మోటార్ పరీక్ష")) {
+                            try {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    vibrator.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE))
+                                } else {
+                                    vibrator.vibrate(400)
+                                }
+                                Toast.makeText(context, tr("Vibration test triggered. Confirm whether you felt vibration.", "వైబ్రేషన్ పరీక్ష ప్రారంభమైంది. ఫోన్ వైబ్రేట్ అయిందో చూడండి."), Toast.LENGTH_LONG).show()
+                            } catch (_: Exception) {
+                                Toast.makeText(context, tr("Vibration test unavailable", "వైబ్రేషన్ పరీక్ష అందుబాటులో లేదు"), Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        ActionButton(tr("Play speaker test tone", "స్పీకర్ పరీక్ష శబ్దం")) {
+                            try {
+                                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 60)
+                                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 700)
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 1000)
+                            } catch (_: Exception) {
+                                Toast.makeText(context, tr("Speaker test unavailable", "స్పీకర్ పరీక్ష అందుబాటులో లేదు"), Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        ActionButton(tr("Open camera for manual test", "కెమెరా మాన్యువల్ పరీక్ష")) {
+                            safeStart(context, Intent("android.media.action.IMAGE_CAPTURE"))
+                        }
+                        ActionButton(tr("Open display colour test", "డిస్‌ప్లే రంగుల పరీక్ష")) { page = "display" }
+                        ActionButton(tr("Open sensor list", "సెన్సార్ల జాబితా")) { page = "sensors" }
+                        Note(tr("For display dead pixels, microphone recording quality, camera focus, charging-port damage and motherboard faults, visual/manual or service-equipment testing is required.", "Dead Pixels, మైక్రోఫోన్ రికార్డింగ్ నాణ్యత, కెమెరా ఫోకస్, ఛార్జింగ్ పోర్ట్, మదర్‌బోర్డ్ లోపాలకు మాన్యువల్ లేదా సర్వీస్ పరికరాల పరీక్ష అవసరం."))
+                    }
+
                     "performance" -> {
                         PageTitle(tr("Performance & Device Info", "పెర్ఫార్మెన్స్ & ఫోన్ వివరాలు"), fg)
                         Info("CPU ABI", data.abi)
@@ -391,7 +446,8 @@ fun DiagnosticHome() {
                             "camera" to tr("Camera & Flash", "కెమెరా & ఫ్లాష్"),
                             "sensors" to tr("Sensors", "సెన్సార్లు"),
                             "network" to tr("Network", "నెట్‌వర్క్"),
-                            "performance" to tr("CPU, RAM & Storage", "CPU, RAM & స్టోరేజ్")
+                            "performance" to tr("CPU, RAM & Storage", "CPU, RAM & స్టోరేజ్"),
+                            "hardware" to tr("Hardware Health Check", "హార్డ్‌వేర్ ఆరోగ్య పరీక్ష")
                         )
                         testItems.forEach { item -> ActionButton(item.second) { page = item.first } }
                     }
@@ -423,7 +479,7 @@ fun DiagnosticHome() {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("Mobile Doctor Pro • Version 1.5.3", color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally), fontSize = 11.sp)
+                Text("Mobile Doctor Pro • Version 1.5.5", color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally), fontSize = 11.sp)
             }
         }
     }
@@ -764,5 +820,3 @@ private fun safeStart(context: Context, intent: Intent) {
         Toast.makeText(context, "This setting or app is unavailable", Toast.LENGTH_SHORT).show()
     }
 }
-
-            
