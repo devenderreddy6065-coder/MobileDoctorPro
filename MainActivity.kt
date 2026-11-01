@@ -1109,4 +1109,26 @@ private fun ComponentTestsPage(
         }
     }
 
+    
     HorizontalDivider()
+    Text("7. CONNECTIVITY & LOCATION", color = Accent, fontWeight = FontWeight.Bold)
+
+    ActionButton("Open Wi-Fi settings") {
+        safeStart(context, Intent(Settings.ACTION_WIFI_SETTINGS))
+    }
+
+    ActionButton("Open Bluetooth settings") {
+        safeStart(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+    }
+
+    ActionButton("Open location settings / GPS") {
+        safeStart(context, Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+    }
+
+    ActionButton("Refresh diagnostics") {
+        onRefresh()
+        Toast.makeText(context, "Diagnostics refresh requested", Toast.LENGTH_SHORT).show()
+    }
+
+    Note("Status guidance: Working response = the tested function responded; Needs manual check = visual/listening confirmation required; Not detected = Android did not report the component. These results cannot detect every internal circuit or motherboard fault.")
+}
