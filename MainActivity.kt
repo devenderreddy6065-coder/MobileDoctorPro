@@ -1088,8 +1088,7 @@ private fun ComponentTestsPage(
     Toast.makeText(
         context,
         "Vibration Error: ${e.javaClass.simpleName} - ${e.message}",
-        Toast.LENGTH_LONG
-    ).show()
+        Toast.LENGTH_LONG).show()
         }
 
     HorizontalDivider()
