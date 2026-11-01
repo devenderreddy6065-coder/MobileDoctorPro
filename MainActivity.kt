@@ -206,7 +206,8 @@ fun DiagnosticHome() {
                             Triple("sensors", tr("Sensors", "సెన్సార్లు"), "⌁"),
                             Triple("network", tr("Network", "నెట్‌వర్క్"), "⌁"),
                             Triple("performance", tr("CPU, RAM & Storage", "CPU, RAM & స్టోరేజ్"), "▤"),
-                            Triple("hardware", tr("Hardware Health Check", "హార్డ్‌వేర్ ఆరోగ్య పరీక్ష"), "⚙")
+                            Triple("hardware", tr("Hardware Health Check", "హార్డ్‌వేర్ ఆరోగ్య పరీక్ష"), "⚙"),
+                            Triple("componenttests", tr("Component Tests", "కాంపోనెంట్ పరీక్షలు"), "🧪")
                         )
                         items.chunked(2).forEach { pair ->
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -299,7 +300,7 @@ fun DiagnosticHome() {
                         Note(tr("Set a safe volume before testing.", "పరీక్షకు ముందు సురక్షితమైన వాల్యూమ్ పెట్టండి."))
                         ActionButton(tr("Play speaker test tone", "స్పీకర్ టెస్ట్ శబ్దం")) {
                             try {
-                                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 60)
+                                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 85)
                                 tone.startTone(ToneGenerator.TONE_PROP_BEEP, 700)
                                 Toast.makeText(context, tr("Test tone played", "టెస్ట్ శబ్దం ప్లే అయింది"), Toast.LENGTH_SHORT).show()
                                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 1000)
@@ -381,7 +382,7 @@ fun DiagnosticHome() {
                         val cameraIds = try { cameraManager.cameraIdList.toList() } catch (_: Exception) { emptyList() }
                         val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
                         val allSensors = try { sensorManager.getSensorList(Sensor.TYPE_ALL) } catch (_: Exception) { emptyList() }
-                        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                        val vibrator = getDeviceVibrator(context)
                         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                         val audioOutputs = try { audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList() } catch (_: Exception) { emptyList() }
                         val audioInputs = try { audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList() } catch (_: Exception) { emptyList() }
@@ -451,19 +452,11 @@ fun DiagnosticHome() {
                         Info("Audio output devices", if (audioOutputs.isEmpty()) "No output device listed" else audioOutputs.joinToString { it.productName.toString() })
                         Info("Vibration motor", if (vibrator.hasVibrator()) "Detected • manual test needed" else "Not detected")
                         ActionButton(tr("Test vibration motor", "వైబ్రేషన్ మోటార్ పరీక్ష")) {
-                            try {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE)) else vibrator.vibrate(400)
-                                Toast.makeText(context, tr("Did you feel vibration?", "వైబ్రేషన్ అనిపించిందా?"), Toast.LENGTH_LONG).show()
-                            } catch (e: Exception) {
-    Toast.makeText(
-        context,
-        "Vibration Error: ${e.javaClass.simpleName} - ${e.message}",
-        Toast.LENGTH_LONG
-    ).show()
-                            }
+                            runVibrationTest(context, vibrator)
+                        }
                         ActionButton(tr("Play speaker test tone", "స్పీకర్ పరీక్ష శబ్దం")) {
                             try {
-                                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 60)
+                                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 85)
                                 tone.startTone(ToneGenerator.TONE_PROP_BEEP, 700)
                                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 1000)
                             } catch (_: Exception) { Toast.makeText(context, "Audio test unavailable", Toast.LENGTH_SHORT).show() }
@@ -488,7 +481,15 @@ fun DiagnosticHome() {
                         Info("Flashlight", if (pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH)) "Feature reported" else "Not reported")
 
                         HorizontalDivider()
+                        ActionButton(tr("Open Live & Manual Component Tests", "లైవ్ & మాన్యువల్ కాంపోనెంట్ పరీక్షలు తెరవండి")) { page = "componenttests" }
                         Note(tr("Detected = Android can see or report the component. A real damage diagnosis may require manual tests, permissions, manufacturer diagnostics or service equipment. Some internal chips and motherboard circuits are not exposed to ordinary Android apps.", "Detected అంటే Android ఆ భాగాన్ని గుర్తించింది. నిజమైన damage నిర్ధారణకు manual tests లేదా service equipment అవసరం కావచ్చు. కొన్ని internal chips, motherboard circuits సాధారణ Android apps‌కు కనిపించవు."))
+                    }
+
+                    "componenttests" -> {
+                        ComponentTestsPage(
+                            onDisplayTest = { screenTest = true },
+                            onRefresh = { refresh++ }
+                        )
                     }
 
                     "performance" -> {
@@ -515,7 +516,8 @@ fun DiagnosticHome() {
                             "sensors" to tr("Sensors", "సెన్సార్లు"),
                             "network" to tr("Network", "నెట్‌వర్క్"),
                             "performance" to tr("CPU, RAM & Storage", "CPU, RAM & స్టోరేజ్"),
-                            "hardware" to tr("Hardware Health Check", "హార్డ్‌వేర్ ఆరోగ్య పరీక్ష")
+                            "hardware" to tr("Hardware Health Check", "హార్డ్‌వేర్ ఆరోగ్య పరీక్ష"),
+                            "componenttests" to tr("Component Tests", "కాంపోనెంట్ పరీక్షలు")
                         )
                         testItems.forEach { item -> ActionButton(item.second) { page = item.first } }
                     }
@@ -547,7 +549,7 @@ fun DiagnosticHome() {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("Mobile Doctor Pro • Version 1.5.6", color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally), fontSize = 11.sp)
+                Text("Mobile Doctor Pro • Version 1.5.8", color = Color.Gray, modifier = Modifier.align(Alignment.CenterHorizontally), fontSize = 11.sp)
             }
         }
     }
@@ -890,7 +892,6 @@ private fun safeStart(context: Context, intent: Intent) {
 }
 
 
-
 /*
  * V1.5.7 ADD-ON MODULE
  * Live sensor response + practical manual component tests.
@@ -950,9 +951,7 @@ private fun ComponentTestsPage(
         }
     }
 
-    val vibrator = remember {
-        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-    }
+    val vibrator = remember { getDeviceVibrator(context) }
     val audioManager = remember {
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
@@ -1070,69 +1069,63 @@ private fun ComponentTestsPage(
     ActionButton("Open camera") {
         safeStart(context, Intent("android.media.action.IMAGE_CAPTURE"))
     }
+
     HorizontalDivider()
     Text("6. VIBRATION MOTOR", color = Accent, fontWeight = FontWeight.Bold)
-
-    Info(
-        "Vibrator hardware",
-        if (vibrator.hasVibrator()) "Detected" else "Not detected"
-    )
-
+    Info("Vibrator hardware", if (vibrator.hasVibrator()) "Detected" else "Not detected")
     ActionButton("Run vibration test") {
-    try {
-        if (vibrator.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(
-                    VibrationEffect.createOneShot(
-                        500,
-                        VibrationEffect.DEFAULT_AMPLITUDE
-                    )
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(500)
-            }
-
-            Toast.makeText(
-                context,
-                "Did you feel the vibration?",
-                Toast.LENGTH_LONG
-            ).show()
-        } else {
-            Toast.makeText(
-                context,
-                "No vibrator reported by Android",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    } catch (e: Exception) {
-        Toast.makeText(
-            context,
-            "Vibration Error: ${e.javaClass.simpleName} - ${e.message}",
-            Toast.LENGTH_LONG
-        ).show()
+        runVibrationTest(context, vibrator)
     }
-}
-    
+
     HorizontalDivider()
     Text("7. CONNECTIVITY & LOCATION", color = Accent, fontWeight = FontWeight.Bold)
-
     ActionButton("Open Wi-Fi settings") {
         safeStart(context, Intent(Settings.ACTION_WIFI_SETTINGS))
     }
-
     ActionButton("Open Bluetooth settings") {
         safeStart(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
     }
-
     ActionButton("Open location settings / GPS") {
         safeStart(context, Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
     }
-
     ActionButton("Refresh diagnostics") {
         onRefresh()
         Toast.makeText(context, "Diagnostics refresh requested", Toast.LENGTH_SHORT).show()
     }
 
     Note("Status guidance: Working response = the tested function responded; Needs manual check = visual/listening confirmation required; Not detected = Android did not report the component. These results cannot detect every internal circuit or motherboard fault.")
+}
+
+
+/* V1.5.9 VIBRATOR COMPATIBILITY ADD-ON */
+private fun getDeviceVibrator(context: Context): Vibrator {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val manager = context.getSystemService(android.os.VibratorManager::class.java)
+        manager.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+}
+
+private fun runVibrationTest(context: Context, vibrator: Vibrator) {
+    try {
+        if (!vibrator.hasVibrator()) {
+            Toast.makeText(context, "Android reports no vibrator hardware", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(
+                VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE)
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(500)
+        }
+        Toast.makeText(context, "Vibration command sent. Did you feel it?", Toast.LENGTH_LONG).show()
+    } catch (e: SecurityException) {
+        Toast.makeText(context, "Vibration permission error: ${e.message}", Toast.LENGTH_LONG).show()
+    } catch (e: Exception) {
+        Toast.makeText(context, "Vibration error: ${e.javaClass.simpleName}: ${e.message}", Toast.LENGTH_LONG).show()
+    }
 }
